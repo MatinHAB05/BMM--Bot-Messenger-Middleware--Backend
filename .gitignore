@@ -1,0 +1,37 @@
+# Binaries
+/bin/
+/out/
+/messenger-backend
+
+# Environment
+.env
+
+# Runtime log output -- both directories are kept in git via .gitkeep,
+# but their generated *.log content never is (clean-logs is explicitly
+# called out as ignored per spec; logs/ follows the same rule since it's
+# equally a runtime artifact, not source).
+logs/app/*.log
+logs/error/*.log
+logs/telegram/*.log
+clean-logs/app/*.log
+clean-logs/error/*.log
+clean-logs/telegram/*.log
+
+# Go
+*.test
+*.out
+/vendor/
+*.exe
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# matin
+SEND_EMAIL.txt
+SEND_PHONE_MESSAGE.txt
+matin_notes.txt
+
+
