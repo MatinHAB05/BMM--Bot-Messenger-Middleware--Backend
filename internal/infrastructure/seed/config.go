@@ -42,6 +42,7 @@ var DefaultAdminPolicies = []policyRule{
 	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/chats/:id/history/:message_id", Method: "GET"}},
 	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/chats/:id/history/:message_id", Method: "DELETE"}},
 	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/chats/otp/send", Method: "POST"}},
+	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/chats/otp/send", Method: "POST"}},
 
 	// Companies
 	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/companies/me", Method: "GET"}},

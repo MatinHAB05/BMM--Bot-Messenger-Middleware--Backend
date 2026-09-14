@@ -10,6 +10,7 @@ import (
 	"messenger-backend/internal/domain/otp"
 	repository_contract "messenger-backend/internal/domain/repository"
 	"messenger-backend/pkg/logger"
+	"strconv"
 
 	"gorm.io/datatypes"
 )
@@ -188,6 +189,26 @@ func (s *chatService) Update(ctx context.Context, companyID, chatID uint, req se
 	return &resp, nil
 }
 
+func (s *chatService) UpdateCompanyID(ctx context.Context, companyID, chatID uint) (*service_contract.ChatResponse, error) {
+	chat, err := s.chatRepo.FindByIDInCompany(ctx, companyID, chatID)
+	if err != nil {
+		if errors.Is(err, exception.ErrChatNotFound) {
+			return nil, exception.ErrChatNotFound
+		}
+		return nil, exception.Wrap(exception.ErrInternal, err)
+	}
+	chat.CompanyID = &companyID
+
+	if err := s.chatRepo.Update(ctx, chat); err != nil {
+		return nil, exception.Wrap(exception.ErrInternal, err)
+	}
+
+	s.log.Info("chat updated", logger.Uint("chat_id", chatID))
+
+	resp := service_contract.ToChatResponse(chat)
+	return &resp, nil
+}
+
 func (s *chatService) Delete(ctx context.Context, companyID, chatID uint) error {
 	_, err := s.chatRepo.FindByIDInCompany(ctx, companyID, chatID)
 	if err != nil {
@@ -346,13 +367,15 @@ func refreshChatMetadata(chat *entity.Chat, update service_contract.IngestedUpda
 	return changed
 }
 
-func (s *chatService) SendOTP(ctx context.Context, companyCode string) (*service_contract.SendLinkChatOTPResponse, error) {
-	_, err := s.companyRepo.FindByCode(ctx, companyCode)
+func (s *chatService) SendOTP(ctx context.Context, companyID uint) (*service_contract.SendLinkChatOTPResponse, error) {
+	_, err := s.companyRepo.FindByID(ctx, companyID)
 	if err != nil {
 		return nil, exception.Wrap(exception.ErrInternal, err)
 	}
 
-	res, err := s.otpService.SendOTP(ctx, companyCode, otp.TypeLink, nil)
+	res, err := s.otpService.SendOTP(ctx, "==does not matter==", otp.TypeLink, map[string]any{
+		"company_id": strconv.FormatUint(uint64(companyID), 10),
+	})
 	if err != nil {
 		return nil, exception.Wrap(exception.ErrInternal, err)
 	}
@@ -363,7 +386,12 @@ func (s *chatService) SendOTP(ctx context.Context, companyCode string) (*service
 		Code:            res.Code,
 	}, nil
 }
-func (s *chatService) FeatChatWithOTP(ctx context.Context, companyCode, code, platformChatID, platform string) (*service_contract.ChatResponse, error) {
+
+
+func (s *chatService) FeatChatWithOTP(ctx context.Context, code, platformChatID, platform, otpchatType string) (*service_contract.ChatResponse, error) {
+	if otpchatType != otp.TypeLink.String() && otpchatType != otp.TypeLinkJustChnnel.String() {
+		panic("WTF")
+	}
 	chat, err := s.chatRepo.FindByPlatformChatID(ctx, entity.MessengerPlatform(platform), platformChatID)
 
 	s.log.Debug("chat begin", logger.Any("chat", chat))
@@ -371,23 +399,33 @@ func (s *chatService) FeatChatWithOTP(ctx context.Context, companyCode, code, pl
 	if err != nil {
 		return nil, exception.Wrap(exception.ErrInternal, err)
 	} else if chat.CompanyID != nil {
-		s.log.Warn("chat was already regestred by a company", logger.String("chat-id", platformChatID), logger.Any("current_company_id", chat.CompanyID), logger.String("target_company_code", companyCode))
+		s.log.Warn("chat was already regestred by a company", logger.String("chat-id", platformChatID), logger.Any("current_company_id", chat.CompanyID))
 		return nil, exception.ErrChatCompanyAlreadyRegistered
 	}
 
-	com, err := s.companyRepo.FindByCode(ctx, companyCode)
+	rawPayload, err := s.otpService.VerifyOTP(ctx, "==does not matter==", otp.Type(otpchatType), code)
 	if err != nil {
 		return nil, exception.Wrap(exception.ErrInternal, err)
 	}
 
-	_, err = s.otpService.VerifyOTP(ctx, companyCode, otp.TypeLink, code)
+	payload, ok := rawPayload.(*otp.LinkChatCompanyPayload)
+	if !ok {
+		s.log.Warn("fail to type assert raw-payload for regiser-user-otp", logger.Any("raw-payload", rawPayload))
+		return nil, exception.Wrap(exception.ErrInternal, err)
+	}
+	uint64_com_id, err := strconv.ParseUint(payload.CompanyID, 10, 64)
 	if err != nil {
 		return nil, exception.Wrap(exception.ErrInternal, err)
 	}
-	err = s.otpService.InvalidateOTP(ctx, companyCode, otp.TypeLink, code)
+	com_id := uint(uint64_com_id)
+
+	err = s.otpService.InvalidateOTPAndSetVerified(ctx, "==does not matter==", otp.Type(otpchatType), code)
+	if err != nil {
+		return nil, exception.Wrap(exception.ErrInternal, err)
+	}
 
 	new_chat := chat
-	new_chat.CompanyID = &com.ID
+	new_chat.CompanyID = &com_id
 	s.log.Debug("before update : ", logger.Any("new_chat", new_chat))
 
 	err = s.chatRepo.Update(ctx, chat)

@@ -25,3 +25,10 @@ type RegisterUserPayload struct {
 }
 
 func (p *RegisterUserPayload) Code() string { return p.OTPCode }
+
+type LinkChatCompanyPayload struct {
+	OTPCode   string `json:"code"`
+	CompanyID string  `json:"company_id"`
+}
+
+func (p *LinkChatCompanyPayload) Code() string { return p.OTPCode }

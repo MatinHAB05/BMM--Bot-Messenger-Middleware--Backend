@@ -25,6 +25,7 @@ const (
 	TypePhone                   Type = "phone"
 	TypeEmail                   Type = "email"
 	TypeLink                    Type = "link"
+	TypeLinkJustChnnel          Type = "link-channel"
 	TypeRegistrionUserToCompany Type = "register-user-to-company"
 )
 
@@ -76,7 +77,6 @@ type Strategy interface {
 	// whichever argument is meaningful to them and ignore the other.
 	Key(identifier, code string) string
 	KeyWithID(identifier string) string
-	
 
 	// DefaultTTL is how long an OTP of this type lives.
 	DefaultTTL() time.Duration

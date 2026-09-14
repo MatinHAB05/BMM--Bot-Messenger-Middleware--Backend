@@ -257,6 +257,18 @@ func (s *otpService) InvalidateOTPAndSetVerified(ctx context.Context, identifier
 	return nil
 }
 
+func (s *otpService) GetAndInvalidateOTP(ctx context.Context, identifier string, otpType otp.Type, code string) (otp.Payload, error) {
+	payload, err := s.VerifyOTP(ctx, identifier, otpType, code)
+	if err != nil {
+		return nil, err
+	}
+	err = s.InvalidateOTP(ctx, identifier, otpType, code)
+	if err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
 func (s *otpService) TTL(ctx context.Context, identifier string, otpType otp.Type, code string) (time.Duration, error) {
 	strat, err := s.strategyFor(otpType)
 	if err != nil {

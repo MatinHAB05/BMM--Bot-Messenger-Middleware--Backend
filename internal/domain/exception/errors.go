@@ -16,9 +16,9 @@ import (
 // ==========================================
 var (
 	// User domain errors
-	ErrDomainUserNotFound       = errors.New("user not found")
-	ErrDomainUserAlreadyExists  = errors.New("user already exists")
-	ErrDomainUserInactive       = errors.New("user account is deactivated")
+	ErrDomainUserNotFound      = errors.New("user not found")
+	ErrDomainUserAlreadyExists = errors.New("user already exists")
+	ErrDomainUserInactive      = errors.New("user account is deactivated")
 
 	// Auth & OTP domain errors
 	ErrDomainInvalidCredentials   = errors.New("invalid credentials")
@@ -33,6 +33,8 @@ var (
 	ErrDomainOTPUnsupportedType   = errors.New("unsupported otp type")
 	ErrDomainOTPInvalidMetadata   = errors.New("invalid otp metadata")
 	ErrDomainUnverifiedCredential = errors.New("unverified credential")
+	ErrDomainInvalidPayload       = errors.New("invalid or unparseable payload")
+	ErrDomainMiddlewareAssertion  = errors.New("middleware assertion failed")
 
 	// Company domain errors
 	ErrDomainCompanyNotFound      = errors.New("company not found")
@@ -55,11 +57,12 @@ var (
 	// General Infrastructure & System errors
 	ErrDomainDatabaseOperation   = errors.New("database operation failed")
 	ErrDomainCacheOperation      = errors.New("cache operation failed")
-	ErrDomainForbidden          = errors.New("action forbidden")
-	ErrDomainRateLimited        = errors.New("rate limit exceeded")
-	ErrDomainInternal           = errors.New("internal error")
-	ErrDomainBadRequest         = errors.New("bad request")
+	ErrDomainForbidden           = errors.New("action forbidden")
+	ErrDomainRateLimited         = errors.New("rate limit exceeded")
+	ErrDomainInternal            = errors.New("internal error")
+	ErrDomainBadRequest          = errors.New("bad request")
 	ErrDomainUnsupportedPlatform = errors.New("unsupported platform")
+	ErrDomainHandlerRouting      = errors.New("handler routing failed")
 	ErrDomainComingSoon          = errors.New("feature is not completed yet")
 )
 
@@ -68,61 +71,64 @@ var (
 // ==========================================
 var (
 	// User
-	ErrUserNotFound               = &AppError{Code: "USER_NOT_FOUND", Message: "user not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainUserNotFound}
-	ErrUserAlreadyExists          = &AppError{Code: "USER_ALREADY_EXISTS", Message: "user already exists", HTTPStatus: http.StatusConflict, Err: ErrDomainUserAlreadyExists}
-	ErrUserEmailAlreadyExists     = &AppError{Code: "USER_EMAIL_ALREADY_EXISTS", Message: "email already in use", HTTPStatus: http.StatusConflict, Err: ErrDomainUserAlreadyExists}
-	ErrUserPhoneAlreadyExists     = &AppError{Code: "USER_PHONE_ALREADY_EXISTS", Message: "phone number already in use", HTTPStatus: http.StatusConflict, Err: ErrDomainUserAlreadyExists}
-	ErrUserUsernameAlreadyExists  = &AppError{Code: "USER_USERNAME_ALREADY_EXISTS", Message: "username already in use", HTTPStatus: http.StatusConflict, Err: ErrDomainUserAlreadyExists}
-	ErrUserInactive               = &AppError{Code: "USER_INACTIVE", Message: "user account is deactivated", HTTPStatus: http.StatusForbidden, Err: ErrDomainUserInactive}
+	ErrUserNotFound              = &AppError{Code: "USER_NOT_FOUND", Message: "user not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainUserNotFound}
+	ErrUserAlreadyExists         = &AppError{Code: "USER_ALREADY_EXISTS", Message: "user already exists", HTTPStatus: http.StatusConflict, Err: ErrDomainUserAlreadyExists}
+	ErrUserEmailAlreadyExists    = &AppError{Code: "USER_EMAIL_ALREADY_EXISTS", Message: "email already in use", HTTPStatus: http.StatusConflict, Err: ErrDomainUserAlreadyExists}
+	ErrUserPhoneAlreadyExists    = &AppError{Code: "USER_PHONE_ALREADY_EXISTS", Message: "phone number already in use", HTTPStatus: http.StatusConflict, Err: ErrDomainUserAlreadyExists}
+	ErrUserUsernameAlreadyExists = &AppError{Code: "USER_USERNAME_ALREADY_EXISTS", Message: "username already in use", HTTPStatus: http.StatusConflict, Err: ErrDomainUserAlreadyExists}
+	ErrUserInactive              = &AppError{Code: "USER_INACTIVE", Message: "user account is deactivated", HTTPStatus: http.StatusForbidden, Err: ErrDomainUserInactive}
 
 	// Auth & OTP
-	ErrInvalidCredentials         = &AppError{Code: "INVALID_CREDENTIALS", Message: "invalid username or password", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainInvalidCredentials}
-	ErrTokenInvalid               = &AppError{Code: "TOKEN_INVALID", Message: "token is invalid", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainTokenInvalid}
-	ErrTokenExpired               = &AppError{Code: "TOKEN_EXPIRED", Message: "token has expired", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainTokenExpired}
-	ErrTokenRevoked               = &AppError{Code: "TOKEN_REVOKED", Message: "token has been revoked", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainTokenRevoked}
-	ErrMissingToken               = &AppError{Code: "MISSING_TOKEN", Message: "authorization token is missing", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainMissingToken}
-	ErrRefreshTokenInvalid        = &AppError{Code: "REFRESH_TOKEN_INVALID", Message: "refresh token is invalid, expired, or already used", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainRefreshTokenInvalid}
-	ErrTokenNotFound              = &AppError{Code: "TOKEN_NOT_FOUND", Message: "token not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainTokenNotFound}
-	ErrOTPInvalid                 = &AppError{Code: "OTP_INVALID", Message: "the provided OTP code is invalid or has expired", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainOTPInvalid}
-	ErrOTPNotFound                = &AppError{Code: "OTP_NOT_FOUND", Message: "the requested OTP code was not found or has expired", HTTPStatus: http.StatusNotFound, Err: ErrDomainOTPNotFound}
-	ErrOTPUnsupportedType         = &AppError{Code: "OTP_UNSUPPORTED_TYPE", Message: "unsupported OTP type", HTTPStatus: http.StatusBadRequest, Err: ErrDomainOTPUnsupportedType}
-	ErrOTPInvalidMetadata         = &AppError{Code: "OTP_INVALID_METADATA", Message: "invalid OTP metadata provided", HTTPStatus: http.StatusBadRequest, Err: ErrDomainOTPInvalidMetadata}
-	ErrEmptyEmailPhone            = &AppError{Code: "EMPTY_PHONE_EMAIL", Message: "at least one of email or phone must be provided", HTTPStatus: http.StatusBadRequest, Err: ErrDomainBadRequest}
-	ErrNotVerifiedCredentials     = &AppError{Code: "NOT_VERIFIED_CREDENTIALS", Message: "credentials (email or phone) are not verified", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainUnverifiedCredential}
+	ErrInvalidCredentials          = &AppError{Code: "INVALID_CREDENTIALS", Message: "invalid username or password", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainInvalidCredentials}
+	ErrTokenInvalid                = &AppError{Code: "TOKEN_INVALID", Message: "token is invalid", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainTokenInvalid}
+	ErrTokenExpired                = &AppError{Code: "TOKEN_EXPIRED", Message: "token has expired", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainTokenExpired}
+	ErrTokenRevoked                = &AppError{Code: "TOKEN_REVOKED", Message: "token has been revoked", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainTokenRevoked}
+	ErrMissingToken                = &AppError{Code: "MISSING_TOKEN", Message: "authorization token is missing", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainMissingToken}
+	ErrMiddlewareTokensAssetion    = &AppError{Code: "MIDDLEWARE_ASSERTION_FAILED", Message: "failed to retrieve token info from middleware context", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainMiddlewareAssertion}
+	ErrRefreshTokenInvalid         = &AppError{Code: "REFRESH_TOKEN_INVALID", Message: "refresh token is invalid, expired, or already used", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainRefreshTokenInvalid}
+	ErrTokenNotFound               = &AppError{Code: "TOKEN_NOT_FOUND", Message: "token not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainTokenNotFound}
+	ErrOTPInvalid                  = &AppError{Code: "OTP_INVALID", Message: "the provided OTP code is invalid or has expired", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainOTPInvalid}
+	ErrOTPNotFound                 = &AppError{Code: "OTP_NOT_FOUND", Message: "the requested OTP code was not found or has expired", HTTPStatus: http.StatusNotFound, Err: ErrDomainOTPNotFound}
+	ErrOTPUnsupportedType          = &AppError{Code: "OTP_UNSUPPORTED_TYPE", Message: "unsupported OTP type", HTTPStatus: http.StatusBadRequest, Err: ErrDomainOTPUnsupportedType}
+	ErrOTPInvalidMetadata          = &AppError{Code: "OTP_INVALID_METADATA", Message: "invalid OTP metadata provided", HTTPStatus: http.StatusBadRequest, Err: ErrDomainOTPInvalidMetadata}
+	ErrInvalidPayload              = &AppError{Code: "INVALID_PAYLOAD", Message: "invalid request payload format or type assertion failure", HTTPStatus: http.StatusBadRequest, Err: ErrDomainInvalidPayload}
+	ErrEmptyEmailPhone             = &AppError{Code: "EMPTY_PHONE_EMAIL", Message: "at least one of email or phone must be provided", HTTPStatus: http.StatusBadRequest, Err: ErrDomainBadRequest}
+	ErrNotVerifiedCredentials      = &AppError{Code: "NOT_VERIFIED_CREDENTIALS", Message: "credentials (email or phone) are not verified", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainUnverifiedCredential}
 	ErrNotVerifiedEmailCredentials = &AppError{Code: "NOT_VERIFIED_EMAIL_CREDENTIAL", Message: "email credential is not verified", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainUnverifiedCredential}
 	ErrNotVerifiedPhoneCredentials = &AppError{Code: "NOT_VERIFIED_PHONE_CREDENTIAL", Message: "phone credential is not verified", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainUnverifiedCredential}
-	ErrNotVerifiedEmailOTP        = &AppError{Code: "NOT_VERIFIED_EMAIL_OTP", Message: "email OTP is not verified", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainUnverifiedCredential}
-	ErrNotVerifiedPhoneOTP        = &AppError{Code: "NOT_VERIFIED_PHONE_OTP", Message: "phone OTP is not verified", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainUnverifiedCredential}
+	ErrNotVerifiedEmailOTP         = &AppError{Code: "NOT_VERIFIED_EMAIL_OTP", Message: "email OTP is not verified", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainUnverifiedCredential}
+	ErrNotVerifiedPhoneOTP         = &AppError{Code: "NOT_VERIFIED_PHONE_OTP", Message: "phone OTP is not verified", HTTPStatus: http.StatusUnauthorized, Err: ErrDomainUnverifiedCredential}
 
 	// Company
-	ErrCompanyNotFound            = &AppError{Code: "COMPANY_NOT_FOUND", Message: "company not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainCompanyNotFound}
-	ErrCompanyInactive            = &AppError{Code: "COMPANY_INACTIVE", Message: "company is deactivated", HTTPStatus: http.StatusForbidden, Err: ErrDomainCompanyInactive}
-	ErrCompanyAlreadyExists       = &AppError{Code: "COMPANY_ALREADY_EXISTS", Message: "company code or name already exists", HTTPStatus: http.StatusConflict, Err: ErrDomainCompanyAlreadyExists}
+	ErrCompanyNotFound      = &AppError{Code: "COMPANY_NOT_FOUND", Message: "company not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainCompanyNotFound}
+	ErrCompanyInactive      = &AppError{Code: "COMPANY_INACTIVE", Message: "company is deactivated", HTTPStatus: http.StatusForbidden, Err: ErrDomainCompanyInactive}
+	ErrCompanyAlreadyExists = &AppError{Code: "COMPANY_ALREADY_EXISTS", Message: "company code or name already exists", HTTPStatus: http.StatusConflict, Err: ErrDomainCompanyAlreadyExists}
 
 	// Chat, Channel & Message
-	ErrChannelNotFound            = &AppError{Code: "CHANNEL_NOT_FOUND", Message: "channel not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainChannelNotFound}
-	ErrChatNotFound               = &AppError{Code: "CHAT_NOT_FOUND", Message: "chat not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainChatNotFound}
-	ErrChatAlreadyExists          = &AppError{Code: "CHAT_ALREADY_EXISTS", Message: "this chat is already registered", HTTPStatus: http.StatusConflict, Err: ErrDomainChatAlreadyExists}
+	ErrChannelNotFound              = &AppError{Code: "CHANNEL_NOT_FOUND", Message: "channel not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainChannelNotFound}
+	ErrChatNotFound                 = &AppError{Code: "CHAT_NOT_FOUND", Message: "chat not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainChatNotFound}
+	ErrChatAlreadyExists            = &AppError{Code: "CHAT_ALREADY_EXISTS", Message: "this chat is already registered", HTTPStatus: http.StatusConflict, Err: ErrDomainChatAlreadyExists}
 	ErrChatCompanyAlreadyRegistered = &AppError{Code: "CHAT_ALREADY_REG_WITH_COMPANY", Message: "this chat is already registered for your company", HTTPStatus: http.StatusConflict, Err: ErrDomainChatCompanyAlreadyRegistered}
-	ErrMessageNotFound            = &AppError{Code: "MESSAGE_NOT_FOUND", Message: "message not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainMessageNotFound}
+	ErrMessageNotFound              = &AppError{Code: "MESSAGE_NOT_FOUND", Message: "message not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainMessageNotFound}
 
 	// RBAC
-	ErrRoleNotFound               = &AppError{Code: "ROLE_NOT_FOUND", Message: "role not found or has no permissions", HTTPStatus: http.StatusNotFound, Err: ErrDomainRoleNotFound}
-	ErrPermissionNotFound         = &AppError{Code: "PERMISSION_NOT_FOUND", Message: "permission not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainPermissionNotFound}
-	ErrEnforcerNil                = &AppError{Code: "ENFORCER_NIL", Message: "enforcer instance is not initialized", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainEnforcerNil}
-	ErrRoleSyncFailed             = &AppError{Code: "ROLE_SYNC_FAILED", Message: "failed to synchronize user roles with the policy store", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainRoleSyncFailed}
+	ErrRoleNotFound       = &AppError{Code: "ROLE_NOT_FOUND", Message: "role not found or has no permissions", HTTPStatus: http.StatusNotFound, Err: ErrDomainRoleNotFound}
+	ErrPermissionNotFound = &AppError{Code: "PERMISSION_NOT_FOUND", Message: "permission not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainPermissionNotFound}
+	ErrEnforcerNil        = &AppError{Code: "ENFORCER_NIL", Message: "enforcer instance is not initialized", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainEnforcerNil}
+	ErrRoleSyncFailed     = &AppError{Code: "ROLE_SYNC_FAILED", Message: "failed to synchronize user roles with the policy store", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainRoleSyncFailed}
 
 	// General & Infrastructure
-	ErrDatabaseOperation         = &AppError{Code: "DATABASE_ERROR", Message: "database operation failed", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainDatabaseOperation}
-	ErrCacheOperation            = &AppError{Code: "CACHE_ERROR", Message: "cache operation failed", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainCacheOperation}
-	ErrForbidden                = &AppError{Code: "FORBIDDEN", Message: "you do not have permission to perform this action", HTTPStatus: http.StatusForbidden, Err: ErrDomainForbidden}
-	ErrRateLimited              = &AppError{Code: "RATE_LIMITED", Message: "too many requests, please try again later", HTTPStatus: http.StatusTooManyRequests, Err: ErrDomainRateLimited}
-	ErrInternal                 = &AppError{Code: "INTERNAL_ERROR", Message: "internal server error", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainInternal}
-	ErrBadRequest               = &AppError{Code: "BAD_REQUEST", Message: "invalid request payload", HTTPStatus: http.StatusBadRequest, Err: ErrDomainBadRequest}
-	ErrBadLoginRequest          = &AppError{Code: "BAD_LOGIN_REQUEST", Message: "exactly one login option must be requested", HTTPStatus: http.StatusBadRequest, Err: ErrDomainBadRequest}
-	ErrUnsupportedPlatform      = &AppError{Code: "UNSUPPORTED_PLATFORM", Message: "one or more requested platforms are not supported", HTTPStatus: http.StatusBadRequest, Err: ErrDomainUnsupportedPlatform}
-	ErrSendMessagePlatform      = &AppError{Code: "SEND_MESSAGE_PLATFORM_ERROR", Message: "failed to send message via platform provider", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainInternal}
-	ErrComingSoon               = &AppError{Code: "COMING_SOON", Message: "this feature is not yet completed", HTTPStatus: http.StatusMethodNotAllowed, Err: ErrDomainComingSoon}
+	ErrDatabaseOperation   = &AppError{Code: "DATABASE_ERROR", Message: "database operation failed", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainDatabaseOperation}
+	ErrCacheOperation      = &AppError{Code: "CACHE_ERROR", Message: "cache operation failed", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainCacheOperation}
+	ErrForbidden           = &AppError{Code: "FORBIDDEN", Message: "you do not have permission to perform this action", HTTPStatus: http.StatusForbidden, Err: ErrDomainForbidden}
+	ErrRateLimited         = &AppError{Code: "RATE_LIMITED", Message: "too many requests, please try again later", HTTPStatus: http.StatusTooManyRequests, Err: ErrDomainRateLimited}
+	ErrInternal            = &AppError{Code: "INTERNAL_ERROR", Message: "internal server error", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainInternal}
+	ErrBadRequest          = &AppError{Code: "BAD_REQUEST", Message: "invalid request payload", HTTPStatus: http.StatusBadRequest, Err: ErrDomainBadRequest}
+	ErrBadLoginRequest     = &AppError{Code: "BAD_LOGIN_REQUEST", Message: "exactly one login option must be requested", HTTPStatus: http.StatusBadRequest, Err: ErrDomainBadRequest}
+	ErrUnsupportedPlatform = &AppError{Code: "UNSUPPORTED_PLATFORM", Message: "one or more requested platforms are not supported", HTTPStatus: http.StatusBadRequest, Err: ErrDomainUnsupportedPlatform}
+	ErrSendMessagePlatform = &AppError{Code: "SEND_MESSAGE_PLATFORM_ERROR", Message: "failed to send message via platform provider", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainInternal}
+	ErrFalsyHandlerRouting = &AppError{Code: "HANDLER_ROUTING_FAILED", Message: "failed to route handlers", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainHandlerRouting}
+	ErrComingSoon          = &AppError{Code: "COMING_SOON", Message: "this feature is not yet completed", HTTPStatus: http.StatusMethodNotAllowed, Err: ErrDomainComingSoon}
 )
 
 // ==========================================

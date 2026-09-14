@@ -45,6 +45,7 @@ type OTPService interface {
 	// InvalidateOTP burns a pending OTP early -- typically called right
 	// after a successful VerifyOTP for single-use semantics, or to let
 	// a caller cancel a code they no longer want honored.
+	GetAndInvalidateOTP(ctx context.Context, identifier string, otpType otp.Type, code string) (otp.Payload, error)
 	InvalidateOTP(ctx context.Context, identifier string, otpType otp.Type, code string) error
 	InvalidateOTPAndSetVerified(ctx context.Context, identifier string, otpType otp.Type, code string) error
 	IsVerified(ctx context.Context, identifier string, otpType otp.Type) (*bool, error)

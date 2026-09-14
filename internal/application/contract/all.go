@@ -5,6 +5,7 @@ import "time"
 type Services struct {
 	AuthService
 	BroadcastService
+	ChannelPendingService
 	ChatHistoryService
 	ChatService
 	CompanyService

@@ -39,8 +39,10 @@ type AuthConfig struct {
 }
 
 type BotConfig struct {
-	TelegramBotToken string `mapstructure:"TELEGRAM_BOT_TOKEN" json:"telegram_bot_token"`
-	BaleBotToken     string `mapstructure:"BALE_BOT_TOKEN" json:"bale_bot_token"`
+	TelegramBotToken    string `mapstructure:"TELEGRAM_BOT_TOKEN" json:"telegram_bot_token"`
+	BaleBotToken        string `mapstructure:"BALE_BOT_TOKEN" json:"bale_bot_token"`
+	TelegramBotUsername string `mapstructure:"TELEGRAM_BOT_USERNAME" json:"telegram_bot_username"`
+	BaleBotUsername     string `mapstructure:"BALE_BOT_USERNAME" json:"bale_bot_username"`
 }
 
 type AdminConfig struct {
@@ -48,8 +50,8 @@ type AdminConfig struct {
 	Password    string `mapstructure:"ADMIN_PASSWORD" json:"admin_password"`
 	Email       string `mapstructure:"ADMIN_EMAIL" json:"admin_email"`
 	Phone       string `mapstructure:"ADMIN_PHONE" json:"admin_phone"`
-	CompanyName string `mapstructure:"ADMIN_COMPANY_NAME" `
-	CompanyCode string `mapstructure:"ADMIN_COMPANY_CODE" `
+	CompanyName string `mapstructure:"ADMIN_COMPANY_NAME" json:"admin_company_name"`
+	CompanyCode string `mapstructure:"ADMIN_COMPANY_CODE" json:"admin_company_code"`
 
 	Chats string `mapstructure:"ADMIN_CHATS" json:"-"`
 }
@@ -64,8 +66,8 @@ type LoggerConfig struct {
 	CleanPath string `mapstructure:"LOG_DIR_FILE_PATH_CLEAN" json:"log_dir_file_path_clean"`
 	Path      string `mapstructure:"LOG_DIR_FILE_PATH" json:"log_dir_file_path"`
 
-	ErrCleanPath string `mapstructure:"LOG_ERR_DIR_FILE_PATH_CLEAN"`
-	ErrPath      string `mapstructure:"LOG_ERR_DIR_FILE_PATH"`
+	ErrCleanPath string `mapstructure:"LOG_ERR_DIR_FILE_PATH_CLEAN" json:"log_err_dir_file_path_clean"`
+	ErrPath      string `mapstructure:"LOG_ERR_DIR_FILE_PATH" json:"log_err_dir_file_path"`
 }
 
 type CasbinConfig struct {
@@ -81,12 +83,12 @@ type OTPConfig struct {
 }
 
 type EmailConfig struct {
-	BMMEmail            string `mapstructure:"BMM_EMAIL"              json:"bmm_email"`
+	BMMEmail            string `mapstructure:"BMM_EMAIL" json:"bmm_email"`
 	BMMEmailAppPassword string `mapstructure:"BMM_EMAIL_APP_PASSWORD" json:"bmm_email_app_password"`
-	SMTPHost            string `mapstructure:"SMTP_HOST"                        json:"smtp_host"`
-	SMTPPort            string `mapstructure:"SMTP_HOST_PORT"                   json:"smtp_host_port"`
-	RealSend            bool `mapstructure:"BMM_EMAIL_REAL_SEND"           `
-	LogInFile           bool `mapstructure:"BMM_EMAIL_LOG_IN_FILE"       `
+	SMTPHost            string `mapstructure:"SMTP_HOST" json:"smtp_host"`
+	SMTPPort            string `mapstructure:"SMTP_HOST_PORT" json:"smtp_host_port"`
+	RealSend            bool   `mapstructure:"BMM_EMAIL_REAL_SEND" json:"bmm_email_real_send"`
+	LogInFile           bool   `mapstructure:"BMM_EMAIL_LOG_IN_FILE" json:"bmm_email_log_in_file"`
 }
 
 type Environment struct {

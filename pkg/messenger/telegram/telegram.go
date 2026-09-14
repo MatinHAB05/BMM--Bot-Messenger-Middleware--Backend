@@ -8,6 +8,7 @@ import (
 	"log"
 	"messenger-backend/pkg/messenger"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-telegram/bot"
@@ -349,4 +350,36 @@ func ChatID(targetID string) any {
 		return id
 	}
 	return targetID
+}
+
+func AddSignToUsername(username string) string {
+	if strings.HasPrefix(username, "@") {
+		return username
+	}
+
+	return "@" + username
+}
+
+func ExtractBotJoinedChannelInfo(update *models.Update) (chatID int64, inviterID int64, ok bool) {
+	if update.MyChatMember == nil {
+		return 0, 0, false
+	}
+
+	mcm := update.MyChatMember
+
+	if mcm.Chat.Type != models.ChatTypeChannel {
+		return 0, 0, false
+	}
+
+	oldStatus := mcm.OldChatMember.Type
+	newStatus := mcm.NewChatMember.Type
+
+	wasOutside := oldStatus == models.ChatMemberTypeLeft || oldStatus == models.ChatMemberTypeBanned
+	isNowInside := newStatus == models.ChatMemberTypeMember || newStatus == models.ChatMemberTypeAdministrator
+
+	if wasOutside && isNowInside {
+		return mcm.Chat.ID, mcm.From.ID, true
+	}
+
+	return 0, 0, false
 }

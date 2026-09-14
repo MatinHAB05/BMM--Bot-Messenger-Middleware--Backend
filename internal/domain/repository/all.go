@@ -2,6 +2,7 @@ package repository_contract
 
 type Repositories struct {
 	AuthnTokenRepository
+	ChannelPendingRepository
 	ChatHistoryRepository
 	ChatRepository
 	CompanyRepository
@@ -10,3 +11,4 @@ type Repositories struct {
 	RBACRepository
 	UserRepository
 }
+	

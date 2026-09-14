@@ -12,6 +12,7 @@ type ChatService interface {
 	Create(ctx context.Context, companyID uint, req CreateChatRequest) (*ChatResponse, error)
 	HalfCreate(ctx context.Context, req CreateChatRequest) (*ChatResponse, error)
 	Update(ctx context.Context, companyID, chatID uint, req UpdateChatRequest) (*ChatResponse, error)
+	UpdateCompanyID(ctx context.Context, companyID, chatID uint) (*ChatResponse, error)
 	Delete(ctx context.Context, companyID, chatID uint) error
 	IngestUpdate(ctx context.Context, companyID uint, update IngestedUpdate) error
 
@@ -20,8 +21,8 @@ type ChatService interface {
 	UpdateByPlatformID(ctx context.Context, companyID uint, platform, platformChatID string, req UpdateChatRequest) (*ChatResponse, error)
 	DeleteByPlatformID(ctx context.Context, companyID uint, platform, platformChatID string) error
 
-	SendOTP(ctx context.Context, companyCode string) (*SendLinkChatOTPResponse, error)
-	FeatChatWithOTP(ctx context.Context, companyCode, code, platformChatID, platform string) (*ChatResponse, error)
+	SendOTP(ctx context.Context, companyID uint) (*SendLinkChatOTPResponse, error)
+	FeatChatWithOTP(ctx context.Context, code, platformChatID, platform, otpchatType string) (*ChatResponse, error)
 }
 
 type SendLinkChatOTPResponse struct {

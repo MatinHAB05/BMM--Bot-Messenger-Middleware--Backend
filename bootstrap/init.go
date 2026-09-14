@@ -11,12 +11,9 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
 	"github.com/pressly/goose/v3"
 	goredis "github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -32,9 +29,13 @@ import (
 	redisinfra "messenger-backend/internal/infrastructure/redis"
 	infrarepo "messenger-backend/internal/infrastructure/repository"
 	"messenger-backend/internal/infrastructure/seed"
-	"messenger-backend/internal/presentation/middleware"
-	"messenger-backend/internal/presentation/v1/handler"
-	"messenger-backend/internal/presentation/v1/router"
+	apimiddleware "messenger-backend/internal/presentation/middleware/api"
+	telegrammiddleware "messenger-backend/internal/presentation/middleware/telegram"
+	apihandler "messenger-backend/internal/presentation/v1/api/handler"
+	apirouter "messenger-backend/internal/presentation/v1/api/router"
+	telegramhandlers "messenger-backend/internal/presentation/v1/telegram/handler"
+	telegramrouter "messenger-backend/internal/presentation/v1/telegram/router"
+
 	"messenger-backend/pkg/logger"
 	"messenger-backend/pkg/messenger"
 	"messenger-backend/pkg/messenger/bale"
@@ -123,6 +124,7 @@ func Init(ctx context.Context) (*App, error) {
 
 	//Repo
 	tokenRepo := infrarepo.NewRedisTokenRepository(redisClient)
+	channelPendingRepo := infrarepo.NewChannelPendingRepository(redisClient)
 	chatHisRepo := infrarepo.NewChatHistoryRepository(db)
 	chatRepo := infrarepo.NewChatRepository(db)
 	companyRepo := infrarepo.NewCompanyRepository(db)
@@ -131,22 +133,23 @@ func Init(ctx context.Context) (*App, error) {
 	rbacRepo := infrarepo.NewRBACRepository(enforcer)
 	userRepo := infrarepo.NewUserRepository(db)
 	Repos := repository_contract.Repositories{
-		AuthnTokenRepository:  tokenRepo,
-		ChatHistoryRepository: chatHisRepo,
-		ChatRepository:        chatRepo,
-		CompanyRepository:     companyRepo,
-		OTPRepository:         otpRepo,
-		RateLimiterRepository: rateLimitRepo,
-		RBACRepository:        rbacRepo,
-		UserRepository:        userRepo,
+		AuthnTokenRepository:     tokenRepo,
+		ChannelPendingRepository: channelPendingRepo,
+		ChatHistoryRepository:    chatHisRepo,
+		ChatRepository:           chatRepo,
+		CompanyRepository:        companyRepo,
+		OTPRepository:            otpRepo,
+		RateLimiterRepository:    rateLimitRepo,
+		RBACRepository:           rbacRepo,
+		UserRepository:           userRepo,
 	}
 
 	// statics
-
 	statics, err := static.InitStaticFiles()
 	if err != nil {
 		return nil, fmt.Errorf("init statics : %w", err)
 	}
+
 	//Service(It is not all of them)
 	trxManger := database.NewTrxManager(db)
 	emailDelivery := appservice.NewEmailService(mail.NewMailer(mail.EmailConfig{
@@ -159,7 +162,8 @@ func Init(ctx context.Context) (*App, error) {
 	otpService, _ := appservice.NewOTPService(otpRepo, emailDelivery, env.App.AppEnv, log,
 		otp.NewPhoneStrategy(env.OTP.OTPTokenTTL, 5, gen),
 		otp.NewEmailStrategy(env.OTP.OTPTokenTTL, 5, gen),
-		otp.NewLinkStrategy(env.OTP.OTPTokenTTL, 5, gen),
+		otp.NewLinkGroupChatCompanyStrategy(env.OTP.OTPTokenTTL, 5, gen),
+		otp.NewLinkChannelChatCompanyStrategy(env.OTP.OTPTokenTTL, 5, gen),
 		otp.NewRegisterUserStrategy(env.OTP.OTPTokenTTL, 5, gen),
 	)
 	authService := appservice.NewAuthService(userRepo, companyRepo, rbacRepo, tokenRepo, otpService, trxManger, tokenMaker, log, &appservice.AuthServiceConfig{
@@ -168,21 +172,24 @@ func Init(ctx context.Context) (*App, error) {
 		AppEnv:          env.App.AppEnv,
 	})
 
+	channelPendingService := appservice.NewChannelPendingService(channelPendingRepo, log, appservice.ChannelPendingServiceConfig{
+		TTL: env.OTP.OTPTokenTTL,
+	})
 	chatHisService := appservice.NewChatHistoryService(chatRepo, chatHisRepo, log)
 	chatService := appservice.NewChatService(chatRepo, chatHisRepo, companyRepo, otpService, log)
 	companyServie := appservice.NewCompanyService(companyRepo, otpService, log)
-
 	rbacService := appservice.NewRBACService(rbacRepo, log)
 	userService := appservice.NewUserService(userRepo, otpService, rbacRepo, log)
 	Services := service_contract.Services{
-		AuthService:        authService,
-		BroadcastService:   nil, // fill it after create mess adapters
-		ChatHistoryService: chatHisService,
-		ChatService:        chatService,
-		CompanyService:     companyServie,
-		OTPService:         otpService,
-		RBACService:        rbacService,
-		UserService:        userService,
+		AuthService:           authService,
+		BroadcastService:      nil, // fill it after create mess adapters
+		ChannelPendingService: channelPendingService,
+		ChatHistoryService:    chatHisService,
+		ChatService:           chatService,
+		CompanyService:        companyServie,
+		OTPService:            otpService,
+		RBACService:           rbacService,
+		UserService:           userService,
 	}
 
 	// seed
@@ -197,9 +204,28 @@ func Init(ctx context.Context) (*App, error) {
 	}, log); err != nil {
 		return nil, fmt.Errorf("seed database: %w", err)
 	}
+	////////////////////////////////////////////////////////////////////////////////////////////
 
 	// platforms handlers
-	telegramHandler := handler.NewTelegramIngestHandler(chatService, chatHisService, log, telLogger)
+
+	basicTelegramHandler := telegramhandlers.NewBasicHandler(chatService, chatHisService, log, errlog)
+	directFeatChatCommandTelegramHandler := telegramhandlers.NewDirectFeatChatCommandHandler(chatService, otpService, log, errlog)
+	featChannelHandler := telegramhandlers.NewFeatChannelHandler(chatService, otpService, channelPendingService, log, errlog)
+
+	telegramHandlers := telegramhandlers.TelegramHandlers{
+		BasicHandler:                 basicTelegramHandler,
+		DirectFeatChatCommandHandler: directFeatChatCommandTelegramHandler,
+		FeatChannelHandler:           featChannelHandler,
+	}
+
+	telegramDeps := telegramrouter.Dependencies{
+		Repositories:     Repos,
+		Services:         Services,
+		TelegramHandlers: telegramHandlers,
+		Logger:           log,
+		TelLogger:        telLogger,
+	}
+	telegramCfg := telegramrouter.Config{}
 
 	// Each messenger engine is wired independently and only enabled when
 	// its token is configured, so the backend still boots cleanly with
@@ -207,27 +233,9 @@ func Init(ctx context.Context) (*App, error) {
 	var clients []messenger.MessengerClient
 
 	var telegramAdapter *telegram.Adapter
+
 	if env.Bot.TelegramBotToken != "" {
-		telegramAdapter, err = telegram.NewAdapter(
-			env.Bot.TelegramBotToken,
-			telegramHandler.OnUpdateTelegram,
-			telegramHandler.OnMessageTelegram,
-			[]bot.Option{
-				bot.WithDebugHandler(bot.DebugHandler(telLogger)),
-				bot.WithDebug(),
-			},
-			func(b *bot.Bot) {
-				b.RegisterHandlerMatchFunc(func(update *models.Update) bool {
-					msg, _ := telegram.ExtractMessage(update)
-					if msg.IsEdited {
-						return false
-					}
-					data := msg.Content
-					return strings.HasPrefix(data, "/link") // /link <company-code> <otp-code>
-				}, telegramHandler.FeatChatWithOTP)
-				b.RegisterHandler(bot.HandlerTypeMessageText, "/link", bot.MatchTypePrefix, telegramHandler.FeatChatWithOTP)
-			},
-		)
+		telegramAdapter, err := telegramrouter.New(telegramDeps, &telegramCfg)
 		if err != nil {
 			return nil, fmt.Errorf("init telegram adapter: %w", err)
 		}
@@ -256,28 +264,28 @@ func Init(ctx context.Context) (*App, error) {
 	Services.BroadcastService = broadcastService
 
 	//Handlers
-	middleware.InitErrLogger(errlog)
-	handler.InitErrLogger(errlog)
-	authHandler := handler.NewAuthHandler(authService)
-	broadcastHandler := handler.NewBroadcastHandler(broadcastService)
-	chatHandler := handler.NewChatHandler(chatService, companyServie)
-	chatHisHandler := handler.NewChatHistoryHandler(chatHisService)
-	companyHandler := handler.NewCompanyHandler(companyServie)
-	userHandler := handler.NewUserHandler(userService)
-	Hadlers := handler.Handlers{
-		AuthHandler:           authHandler,
-		BroadcastHandler:      broadcastHandler,
-		ChatHandler:           chatHandler,
-		ChatHistoryHandler:    chatHisHandler,
-		CompanyHandler:        companyHandler,
-		TelegramIngestHandler: telegramHandler,
-		UserHandler:           userHandler,
+	apimiddleware.InitErrLogger(errlog)      //**
+	telegrammiddleware.InitErrLogger(errlog) //**
+
+	authHandler := apihandler.NewAuthHandler(authService)
+	broadcastHandler := apihandler.NewBroadcastHandler(broadcastService)
+	chatHandler := apihandler.NewChatHandler(chatService, companyServie)
+	chatHisHandler := apihandler.NewChatHistoryHandler(chatHisService)
+	companyHandler := apihandler.NewCompanyHandler(companyServie)
+	userHandler := apihandler.NewUserHandler(userService)
+	APIHandlers := apihandler.APIHandlers{
+		AuthHandler:        authHandler,
+		BroadcastHandler:   broadcastHandler,
+		ChatHandler:        chatHandler,
+		ChatHistoryHandler: chatHisHandler,
+		CompanyHandler:     companyHandler,
+		UserHandler:        userHandler,
 	}
 
-	deps := router.Dependencies{
+	deps := apirouter.Dependencies{
 		Repositories: Repos,
 		Services:     Services,
-		Handlers:     Hadlers,
+		APIHandlers:  APIHandlers,
 		TokenMaker:   tokenMaker,
 		Logger:       log,
 	}
@@ -294,7 +302,7 @@ func Init(ctx context.Context) (*App, error) {
 		DB:    db.GetGormDB(),
 		Redis: redisClient.GetRDB(),
 
-		Router: router.New(deps, &router.Config{
+		Router: apirouter.New(deps, &apirouter.Config{
 			GlobalPerMinute:    env.RateLimit.GlobalPerMinute,
 			AuthPerMinute:      env.RateLimit.AuthPerMinute,
 			BroadcastPerMinute: env.RateLimit.BroadcastPerMinute,

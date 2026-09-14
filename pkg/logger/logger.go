@@ -16,11 +16,12 @@ type Field struct {
 	Value interface{}
 }
 
-func String(key, value string) Field           { return Field{Key: key, Value: value} }
-func Int(key string, value int) Field          { return Field{Key: key, Value: value} }
-func Int64(key string, value int64) Field      { return Field{Key: key, Value: value} }
-func Uint(key string, value uint) Field        { return Field{Key: key, Value: value} }
-func Bool(key string, value bool) Field        { return Field{Key: key, Value: value} }
+func String(key, value string) Field        { return Field{Key: key, Value: value} }
+func Int(key string, value int) Field       { return Field{Key: key, Value: value} }
+func Int64(key string, value int64) Field   { return Field{Key: key, Value: value} }
+func Uint(key string, value uint) Field     { return Field{Key: key, Value: value} }
+func Uint64(key string, value uint64) Field { return Field{Key: key, Value: value} }
+func Bool(key string, value bool) Field     { return Field{Key: key, Value: value} }
 func Duration(key string, value time.Duration) Field {
 	return Field{Key: key, Value: value.String()}
 }

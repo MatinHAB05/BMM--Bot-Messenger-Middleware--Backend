@@ -27,11 +27,6 @@ func NewEmailStrategy(ttl time.Duration, codeLength int, gen CodeGenerator) Stra
 	return &identifierKeyedStrategy{otpType: TypeEmail, ttl: ttl, codeLength: codeLength, gen: gen}
 }
 
-// NewPhoneStrategy builds the Strategy for otp:phone:{phone} OTPs.
-func NewLinkStrategy(ttl time.Duration, codeLength int, gen CodeGenerator) Strategy {
-	return &identifierKeyedStrategy{otpType: TypeLink, ttl: ttl, codeLength: codeLength, gen: gen}
-}
-
 func (s *identifierKeyedStrategy) Type() Type { return s.otpType }
 
 func (s *identifierKeyedStrategy) Key(identifier, _ string) string {
@@ -52,6 +47,80 @@ func (s *identifierKeyedStrategy) EmptyPayload() Payload { return &SimplePayload
 
 func (s *identifierKeyedStrategy) NewPayload(code string, _ map[string]any) (Payload, error) {
 	return &SimplePayload{OTPCode: code}, nil
+}
+
+// ////////////////////////////////////////
+
+type linkgroupchatcompanyStrategy struct {
+	otpType    Type
+	ttl        time.Duration
+	codeLength int
+	gen        CodeGenerator
+}
+
+// NewPhoneStrategy builds the Strategy for otp:phone:{phone} OTPs.
+
+func NewLinkGroupChatCompanyStrategy(ttl time.Duration, codeLength int, gen CodeGenerator) Strategy {
+	return &linkgroupchatcompanyStrategy{otpType: TypeLink, ttl: ttl, codeLength: codeLength, gen: gen}
+}
+func (s *linkgroupchatcompanyStrategy) Type() Type { return s.otpType }
+
+func (s *linkgroupchatcompanyStrategy) Key(_, code string) string {
+	return fmt.Sprintf("otp:%s:%s:%s", s.otpType, "group", code)
+}
+
+func (s *linkgroupchatcompanyStrategy) KeyWithID(identifier string) string {
+	return fmt.Sprintf("otp:%s:%s:%s", s.otpType, "group", identifier)
+}
+
+func (s *linkgroupchatcompanyStrategy) DefaultTTL() time.Duration { return s.ttl }
+
+func (s *linkgroupchatcompanyStrategy) GenerateCode() (string, error) {
+	return s.gen.RandBase58String(s.codeLength)
+}
+
+func (s *linkgroupchatcompanyStrategy) EmptyPayload() Payload { return &LinkChatCompanyPayload{} }
+
+func (s *linkgroupchatcompanyStrategy) NewPayload(code string, metadatas map[string]any) (Payload, error) {
+	return &LinkChatCompanyPayload{OTPCode: code, CompanyID: metadatas["company_id"].(string)}, nil
+}
+
+// ////////////////////////////////////////
+
+// ////////////////////////////////////////
+
+type linkchannelchatcompanyStrategy struct {
+	otpType    Type
+	ttl        time.Duration
+	codeLength int
+	gen        CodeGenerator
+}
+
+// NewPhoneStrategy builds the Strategy for otp:phone:{phone} OTPs.
+
+func NewLinkChannelChatCompanyStrategy(ttl time.Duration, codeLength int, gen CodeGenerator) Strategy {
+	return &linkchannelchatcompanyStrategy{otpType: TypeLinkJustChnnel, ttl: ttl, codeLength: codeLength , gen: gen}
+}
+func (s *linkchannelchatcompanyStrategy) Type() Type { return s.otpType }
+
+func (s *linkchannelchatcompanyStrategy) Key(_, code string) string {
+	return fmt.Sprintf("otp:%s:%s:%s", s.otpType, "channel", code)
+}
+
+func (s *linkchannelchatcompanyStrategy) KeyWithID(identifier string) string {
+	return fmt.Sprintf("otp:%s:%s:%s", s.otpType, "channel", identifier)
+}
+
+func (s *linkchannelchatcompanyStrategy) DefaultTTL() time.Duration { return s.ttl }
+
+func (s *linkchannelchatcompanyStrategy) GenerateCode() (string, error) {
+	return s.gen.RandBase58String(s.codeLength)
+}
+
+func (s *linkchannelchatcompanyStrategy) EmptyPayload() Payload { return &LinkChatCompanyPayload{} }
+
+func (s *linkchannelchatcompanyStrategy) NewPayload(code string, metadatas map[string]any) (Payload, error) {
+	return &LinkChatCompanyPayload{OTPCode: code, CompanyID: metadatas["company_id"].(string)}, nil
 }
 
 // ////////////////////////////////////////
