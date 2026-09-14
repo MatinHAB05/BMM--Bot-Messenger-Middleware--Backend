@@ -199,7 +199,7 @@ func (p *DeppStartGroupChatCompanyCommandParser) Parse(text string) (string, err
 
 	expectedCmdWithUsername := fmt.Sprintf("/start@%s", strings.TrimPrefix(p.TelegramUsername, "@"))
 
-	if cmd != "/start" && cmd != expectedCmdWithUsername {
+	if cmd != expectedCmdWithUsername {
 		return "", exception.ErrBadRequest
 	}
 

@@ -190,12 +190,14 @@ func (s *chatService) Update(ctx context.Context, companyID, chatID uint, req se
 }
 
 func (s *chatService) UpdateCompanyID(ctx context.Context, companyID, chatID uint) (*service_contract.ChatResponse, error) {
-	chat, err := s.chatRepo.FindByIDInCompany(ctx, companyID, chatID)
+	chat, err := s.chatRepo.FindByID(ctx, chatID)
 	if err != nil {
 		if errors.Is(err, exception.ErrChatNotFound) {
 			return nil, exception.ErrChatNotFound
 		}
 		return nil, exception.Wrap(exception.ErrInternal, err)
+	} else if chat.CompanyID != nil {
+		return nil, exception.ErrChatCompanyAlreadyRegistered
 	}
 	chat.CompanyID = &companyID
 
@@ -386,7 +388,6 @@ func (s *chatService) SendOTP(ctx context.Context, companyID uint) (*service_con
 		Code:            res.Code,
 	}, nil
 }
-
 
 func (s *chatService) FeatChatWithOTP(ctx context.Context, code, platformChatID, platform, otpchatType string) (*service_contract.ChatResponse, error) {
 	if otpchatType != otp.TypeLink.String() && otpchatType != otp.TypeLinkJustChnnel.String() {

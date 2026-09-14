@@ -225,7 +225,10 @@ func Init(ctx context.Context) (*App, error) {
 		Logger:           log,
 		TelLogger:        telLogger,
 	}
-	telegramCfg := telegramrouter.Config{}
+	telegramCfg := telegramrouter.Config{
+		Token:       env.Bot.TelegramBotToken,
+		BotUsername: env.Bot.TelegramBotUsername,
+	}
 
 	// Each messenger engine is wired independently and only enabled when
 	// its token is configured, so the backend still boots cleanly with
@@ -235,7 +238,8 @@ func Init(ctx context.Context) (*App, error) {
 	var telegramAdapter *telegram.Adapter
 
 	if env.Bot.TelegramBotToken != "" {
-		telegramAdapter, err := telegramrouter.New(telegramDeps, &telegramCfg)
+		telegramAdapter, err = telegramrouter.New(telegramDeps, &telegramCfg)
+
 		if err != nil {
 			return nil, fmt.Errorf("init telegram adapter: %w", err)
 		}
@@ -264,6 +268,7 @@ func Init(ctx context.Context) (*App, error) {
 	Services.BroadcastService = broadcastService
 
 	//Handlers
+	apihandler.InitErrLogger(errlog)         //**
 	apimiddleware.InitErrLogger(errlog)      //**
 	telegrammiddleware.InitErrLogger(errlog) //**
 

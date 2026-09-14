@@ -103,7 +103,7 @@ func (h *FeatChannelHandler) SetChannelPendingDeepStartChannelCommand(ctx contex
 		ReplyMarkup: models.InlineKeyboardMarkup{
 			InlineKeyboard: [][]models.InlineKeyboardButton{
 				{
-					{Text: "📢 Select & Add Channel", CallbackData: "select_channel"},
+					{Text: "📢 Select & Add Channel", CallbackData: "select_channel", URL: "https://t.me/tel_bmm_bot?startchannel&admin=post_messages+edit_messages+delete_messages&salam"},
 				},
 			},
 		},
