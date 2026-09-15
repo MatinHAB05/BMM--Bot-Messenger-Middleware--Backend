@@ -54,17 +54,19 @@ type jobResult struct {
 }
 
 type broadcastService struct {
-	clients     map[string]messenger.MessengerClient
-	chatRepo    repository_contract.ChatRepository
-	chatHisRepo repository_contract.ChatHistoryRepository
-	log         logger.Logger
-	cfg         BroadcastConfig
+	clients            map[string]messenger.MessengerClient
+	chatRepo           repository_contract.ChatRepository
+	chatHisRepo        repository_contract.ChatHistoryRepository
+	sentbalemsgService service_contract.SentBaleMsgService
+	log                logger.Logger
+	cfg                BroadcastConfig
 }
 
 func NewBroadcastService(
 	clients []messenger.MessengerClient,
 	chatRepo repository_contract.ChatRepository,
 	chatHisRepo repository_contract.ChatHistoryRepository,
+	sentbalemsgService service_contract.SentBaleMsgService,
 	log logger.Logger,
 	cfg BroadcastConfig,
 ) service_contract.BroadcastService {
@@ -81,11 +83,12 @@ func NewBroadcastService(
 	}
 
 	return &broadcastService{
-		clients:     registry,
-		chatRepo:    chatRepo,
-		chatHisRepo: chatHisRepo,
-		log:         log.With(logger.String("component", "broadcast_service")),
-		cfg:         cfg,
+		clients:            registry,
+		chatRepo:           chatRepo,
+		chatHisRepo:        chatHisRepo,
+		sentbalemsgService: sentbalemsgService,
+		log:                log.With(logger.String("component", "broadcast_service")),
+		cfg:                cfg,
 	}
 }
 
@@ -204,10 +207,11 @@ func (s *broadcastService) Broadcast(ctx context.Context, companyID uint, req se
 				logger.String("target_id", job.chat.PlatformChatID),
 			)
 			return jobResult{
+
 				result: service_contract.BroadcastResult{
 					Platform: job.platform,
 					Success:  false,
-					Error:    err.Error(),
+					Error:    []string{err.Error()},
 				},
 				target: target,
 			}
@@ -240,7 +244,7 @@ func (s *broadcastService) Broadcast(ctx context.Context, companyID uint, req se
 			// a partial failure rather than a clean success, since
 			// this row won't be reachable by DeleteBroadcast later.
 			result.Success = false
-			result.Error = err.Error()
+			result.Error = append(result.Error, err.Error())
 			s.log.Error(err, "broadcast history persist failed",
 				logger.String("platform", job.platform),
 				logger.String("target_id", job.chat.PlatformChatID),
@@ -252,6 +256,11 @@ func (s *broadcastService) Broadcast(ctx context.Context, companyID uint, req se
 			)
 		}
 
+		err = s.sentbalemsgService.SetSentBaleMsg(ctx, job.chat.PlatformChatID, req.Message) // ? : FUCK BALE!
+		if err != nil {
+			result.Success = false
+			result.Error = append(result.Error, err.Error())
+		}
 		return jobResult{result: result, target: target}
 	}
 
@@ -290,7 +299,7 @@ func (s *broadcastService) DeleteBroadcast(ctx context.Context, companyID uint, 
 				result: service_contract.BroadcastResult{
 					Platform: job.platform,
 					Success:  false,
-					Error:    err.Error(),
+					Error:    []string{err.Error()},
 				},
 				target: target,
 			}
@@ -305,7 +314,7 @@ func (s *broadcastService) DeleteBroadcast(ctx context.Context, companyID uint, 
 				result: service_contract.BroadcastResult{
 					Platform: job.platform,
 					Success:  false,
-					Error:    err.Error(),
+					Error:    []string{err.Error()},
 				},
 				target: target,
 			}
@@ -326,7 +335,7 @@ func (s *broadcastService) DeleteBroadcast(ctx context.Context, companyID uint, 
 			// history row failed to update. Surface as a partial
 			// failure so it can be reconciled later.
 			result.Success = false
-			result.Error = err.Error()
+			result.Error = []string{err.Error()}
 			s.log.Error(err, "broadcast delete: history cleanup failed",
 				logger.String("platform", job.platform),
 				logger.String("target_id", job.chat.PlatformChatID),

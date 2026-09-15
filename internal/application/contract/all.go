@@ -12,6 +12,7 @@ type Services struct {
 	CompanyService
 	OTPService
 	RBACService
+	SentBaleMsgService
 	UserService
 }
 

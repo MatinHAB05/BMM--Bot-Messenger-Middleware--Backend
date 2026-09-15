@@ -16,9 +16,9 @@ type DeleteBroadcastRequest struct {
 }
 
 type BroadcastResult struct {
-	Platform string `json:"platform"`
-	Success  bool   `json:"success"`
-	Error    string `json:"error,omitempty"`
+	Platform string   `json:"platform"`
+	Success  bool     `json:"success"`
+	Error    []string `json:"error,omitempty"`
 }
 
 type BroadcastTarget struct {

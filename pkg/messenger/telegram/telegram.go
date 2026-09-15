@@ -306,7 +306,7 @@ func MessageSender(msg *models.Message) (id string, name string) {
 	switch {
 	case msg.From != nil && msg.From.ID != 0:
 		return strconv.FormatInt(msg.From.ID, 10), UserDisplayName(*msg.From)
-	case msg.SenderChat != nil && msg.From.ID == 0:
+	case msg.SenderChat != nil:
 		return "", "?"
 		// return strconv.FormatInt(msg.SenderChat.ID, 10), chatTitle(*msg.SenderChat)
 	default:

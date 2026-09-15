@@ -16,6 +16,7 @@ import (
 type BasicHandler struct {
 	chatService        service_contract.ChatService
 	chatHistoryService service_contract.ChatHistoryService
+	sentbalemsgService service_contract.SentBaleMsgService
 	log                logger.Logger
 	errLog             logger.Logger
 }
@@ -23,12 +24,14 @@ type BasicHandler struct {
 func NewBasicHandler(
 	chatService service_contract.ChatService,
 	chatHistoryService service_contract.ChatHistoryService,
+	sentbalemsgService service_contract.SentBaleMsgService,
 	log logger.Logger,
 	errLog logger.Logger,
 ) *BasicHandler {
 	return &BasicHandler{
 		chatService:        chatService,
 		chatHistoryService: chatHistoryService,
+		sentbalemsgService: sentbalemsgService,
 		log:                log.With(logger.String("component", "BasicHandler_Bale")),
 		errLog:             errLog.With(logger.String("component", "BasicHandler_Bale")),
 	}
@@ -82,6 +85,20 @@ func (h *BasicHandler) OnMessage(ctx context.Context, msg telegram.MessageUpdate
 			"failed to resolve or half-create chat on message",
 			logger.String("platform_chat_id", msg.TargetID),
 		)
+		return
+	}
+
+	ex, err := h.sentbalemsgService.HasSentBaleMsg(ctx, msg.TargetID, msg.Content) // ? : FUCK BALE!
+	if err != nil {
+		h.log.Error(err, "failed to check sent bale msg", logger.String("chat_id", msg.TargetID))
+		return
+	}
+	if ex == nil || *ex {
+		if ex == nil {
+			h.log.Error(errors.New("has sent bale msg returned nil result"), "unexpected nil result", logger.String("chat_id", msg.TargetID))
+		} else {
+			h.log.Info("bale message already sent, skipping", logger.String("chat_id", msg.TargetID), logger.String("content", msg.Content))
+		}
 		return
 	}
 

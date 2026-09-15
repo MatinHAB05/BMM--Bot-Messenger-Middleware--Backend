@@ -9,6 +9,6 @@ type Repositories struct {
 	OTPRepository
 	RateLimiterRepository
 	RBACRepository
+	SentBaleMsgRepository
 	UserRepository
 }
-	

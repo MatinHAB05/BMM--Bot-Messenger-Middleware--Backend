@@ -36,11 +36,11 @@ func New(deps Dependencies, cfg *Config) (*telegram.Adapter, error) {
 	}
 
 	baleAdapter, err := telegram.NewAdapter(cfg.Token, deps.BasicHandler.OnUpdate, deps.BasicHandler.OnMessage, baleOpts, setupRouting(deps, cfg))
-	baleAdapter.SetPlatform("bale")
 
 	if err != nil {
 		return nil, err
 	}
+	baleAdapter.SetPlatform("bale")
 
 	return baleAdapter, nil
 }

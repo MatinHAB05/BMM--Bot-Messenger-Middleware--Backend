@@ -37,7 +37,7 @@ func SetChannelPendingDeepStartChannelRouter(update *models.Update) bool {
 	args := strings.Fields(text)
 
 	// /start <otp-code>
-	return len(args) == 2 && args[0] != "/start"
+	return len(args) == 2 && args[0] == "/start"
 }
 
 func RegisterChanneltAcceptnessRouter(update *models.Update) bool {

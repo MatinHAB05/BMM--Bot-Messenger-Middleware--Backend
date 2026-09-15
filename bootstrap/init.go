@@ -36,6 +36,8 @@ import (
 	apirouter "messenger-backend/internal/presentation/v1/api/router"
 	balehandlers "messenger-backend/internal/presentation/v1/bale/handler"
 	balerouter "messenger-backend/internal/presentation/v1/bale/router"
+	telegramhandlers "messenger-backend/internal/presentation/v1/telegram/handler"
+	telegramrouter "messenger-backend/internal/presentation/v1/telegram/router"
 
 	"messenger-backend/pkg/logger"
 	"messenger-backend/pkg/messenger"
@@ -78,7 +80,7 @@ func Init(ctx context.Context) (*App, error) {
 		return nil, fmt.Errorf("init logger: %w", err)
 	}
 
-	// telLogger, _ := tellogger.NewLogger(false, "telegram")
+	telLogger, _ := tellogger.NewLogger(false, "telegram")
 	baleLogger, _ := tellogger.NewLogger(false, "bale")
 
 	if env.Auth.PasetoSymmetricKey == "" {
@@ -132,6 +134,7 @@ func Init(ctx context.Context) (*App, error) {
 	otpRepo := infrarepo.NewOTPRepository(redisClient)
 	rateLimitRepo := infrarepo.NewRedisRateLimiterRepository(redisClient)
 	rbacRepo := infrarepo.NewRBACRepository(enforcer)
+	sentbalemsgRepo := infrarepo.NewSentBaleMsgRepository(redisClient)
 	userRepo := infrarepo.NewUserRepository(db)
 	Repos := repository_contract.Repositories{
 		AuthnTokenRepository:     tokenRepo,
@@ -142,6 +145,7 @@ func Init(ctx context.Context) (*App, error) {
 		OTPRepository:            otpRepo,
 		RateLimiterRepository:    rateLimitRepo,
 		RBACRepository:           rbacRepo,
+		SentBaleMsgRepository:    sentbalemsgRepo,
 		UserRepository:           userRepo,
 	}
 
@@ -181,6 +185,7 @@ func Init(ctx context.Context) (*App, error) {
 	chatLinkService := appservice.NewChatLinkService(chatService, otpService, channelPendingService, log, errlog)
 	companyServie := appservice.NewCompanyService(companyRepo, otpService, log)
 	rbacService := appservice.NewRBACService(rbacRepo, log)
+	sentbalemsgService := appservice.NewSentBaleMsgService(sentbalemsgRepo, log, appservice.SentBaleMsgServiceConfig{TTL: time.Second * 3500})
 	userService := appservice.NewUserService(userRepo, otpService, rbacRepo, log)
 	Services := service_contract.Services{
 		AuthService:           authService,
@@ -192,6 +197,7 @@ func Init(ctx context.Context) (*App, error) {
 		CompanyService:        companyServie,
 		OTPService:            otpService,
 		RBACService:           rbacService,
+		SentBaleMsgService:    sentbalemsgService,
 		UserService:           userService,
 	}
 
@@ -210,31 +216,31 @@ func Init(ctx context.Context) (*App, error) {
 	////////////////////////////////////////////////////////////////////////////////////////////
 
 	// platforms handlers
-	//Telegram :
-	// basicTelegramHandler := telegramhandlers.NewBasicHandler(chatService, chatHisService, log, errlog)
-	// directFeatChatCommandTelegramHandler := telegramhandlers.NewDirectFeatChatCommandHandler(chatLinkService, errlog)
-	// featChannelTelegramHandler := telegramhandlers.NewFeatChannelHandler(chatLinkService, env.Bot.TelegramBotUsername, errlog)
+	// Telegram:
+	basicTelegramHandler := telegramhandlers.NewBasicHandler(chatService, chatHisService, log, errlog)
+	directFeatChatCommandTelegramHandler := telegramhandlers.NewDirectFeatChatCommandHandler(chatLinkService, errlog)
+	featChannelTelegramHandler := telegramhandlers.NewFeatChannelHandler(chatLinkService, env.Bot.TelegramBotUsername, errlog)
 
-	// telegramHandlers := telegramhandlers.TelegramHandlers{
-	// 	BasicHandler:                 basicTelegramHandler,
-	// 	DirectFeatChatCommandHandler: directFeatChatCommandTelegramHandler,
-	// 	FeatChannelHandler:           featChannelTelegramHandler,
-	// }
+	telegramHandlers := telegramhandlers.TelegramHandlers{
+		BasicHandler:                 basicTelegramHandler,
+		DirectFeatChatCommandHandler: directFeatChatCommandTelegramHandler,
+		FeatChannelHandler:           featChannelTelegramHandler,
+	}
 
-	// telegramDeps := telegramrouter.Dependencies{
-	// 	Repositories:     Repos,
-	// 	Services:         Services,
-	// 	TelegramHandlers: telegramHandlers,
-	// 	Logger:           log,
-	// 	TelLogger:        telLogger,
-	// }
-	// telegramCfg := telegramrouter.Config{
-	// 	Token:       env.Bot.TelegramBotToken,
-	// 	BotUsername: env.Bot.TelegramBotUsername,
-	// }
+	telegramDeps := telegramrouter.Dependencies{
+		Repositories:     Repos,
+		Services:         Services,
+		TelegramHandlers: telegramHandlers,
+		Logger:           log,
+		TelLogger:        telLogger,
+	}
+	telegramCfg := telegramrouter.Config{
+		Token:       env.Bot.TelegramBotToken,
+		BotUsername: env.Bot.TelegramBotUsername,
+	}
 
 	// Bale
-	basicBaleHandler := balehandlers.NewBasicHandler(chatService, chatHisService, log, errlog)
+	basicBaleHandler := balehandlers.NewBasicHandler(chatService, chatHisService, sentbalemsgService, log, errlog)
 	directFeatChatCommandBaleHandler := balehandlers.NewDirectFeatChatCommandHandler(chatLinkService, errlog)
 	featChannelBaleHandler := balehandlers.NewFeatChannelHandler(chatLinkService, env.Bot.BaleBotUsername, errlog) // ✅ فیکس شد: BaleBotUsername
 
@@ -261,18 +267,18 @@ func Init(ctx context.Context) (*App, error) {
 	// just one platform (or neither, for local development without bots).
 	var clients []messenger.MessengerClient
 
-	// var telegramAdapter *telegram.Adapter
+	var telegramAdapter *telegram.Adapter
 
-	// if env.Bot.TelegramBotToken != "" {
-	// 	telegramAdapter, err = telegramrouter.New(telegramDeps, &telegramCfg)
+	if env.Bot.TelegramBotToken != "" {
+		telegramAdapter, err = telegramrouter.New(telegramDeps, &telegramCfg)
 
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("init telegram adapter: %w", err)
-	// 	}
-	// 	clients = append(clients, telegramAdapter)
-	// } else {
-	// 	log.Warn("TELEGRAM_BOT_TOKEN not set -- Telegram engine disabled")
-	// }
+		if err != nil {
+			return nil, fmt.Errorf("init telegram adapter: %w", err)
+		}
+		clients = append(clients, telegramAdapter)
+	} else {
+		log.Warn("TELEGRAM_BOT_TOKEN not set -- Telegram engine disabled")
+	}
 
 	var baleAdapter *telegram.Adapter
 
@@ -288,7 +294,7 @@ func Init(ctx context.Context) (*App, error) {
 	}
 
 	// ... Services
-	broadcastService := appservice.NewBroadcastService(clients, chatRepo, chatHisRepo, log, appservice.BroadcastConfig{
+	broadcastService := appservice.NewBroadcastService(clients, chatRepo, chatHisRepo, sentbalemsgService, log, appservice.BroadcastConfig{
 		WorkerCount: 10,
 		QueueSize:   10,
 	})
@@ -341,8 +347,8 @@ func Init(ctx context.Context) (*App, error) {
 			BroadcastPerMinute: env.RateLimit.BroadcastPerMinute,
 		}),
 
-		telegramAdapter: nil,         //for debug bale
-		baleAdapter:     baleAdapter, // ✅ فیکس شد: دیگه nil نیست و کامنت مرده پاک شد
+		telegramAdapter: telegramAdapter, //for debug bale
+		baleAdapter:     baleAdapter,     // ✅ فیکس شد: دیگه nil نیست و کامنت مرده پاک شد
 	}, nil
 }
 
@@ -391,7 +397,7 @@ func (a *App) StartListeners(ctx context.Context) {
 		}()
 	}
 	if a.baleAdapter != nil {
-
+		// return //TODO
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
