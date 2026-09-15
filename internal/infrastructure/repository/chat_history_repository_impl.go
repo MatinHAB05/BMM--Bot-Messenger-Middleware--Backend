@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"messenger-backend/internal/domain/entity"
@@ -122,4 +123,20 @@ func (r *chatHistoryRepository) Delete(ctx context.Context, chatID, messageID ui
 	}
 
 	return nil
+}
+
+func (r *chatHistoryRepository) GetByBroadcastMsgID(ctx context.Context, broadcastMsgUUID uuid.UUID, chatID uint) (*entity.ChatHistory, error) {
+	var message entity.ChatHistory
+	// db := database.ExtractTrxOrDB(ctx, r.db)
+	db := r.db
+
+	err := db.GetGormDB().WithContext(ctx).Where("broadcast_uuid = ? AND chat_id = ?", broadcastMsgUUID, chatID).First(&message).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) || message.BroadcastUUID == nil || message.IsBroadcast == false {
+			return nil, exception.ErrMessageNotFound
+		}
+		return nil, fmt.Errorf("%w: %v", exception.ErrDatabaseOperation, err)
+	}
+
+	return &message, nil
 }

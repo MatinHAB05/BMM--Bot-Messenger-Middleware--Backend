@@ -106,6 +106,10 @@ func (h *ChatHistoryHandler) Delete(c *gin.Context) {
 	success(c, http.StatusOK, gin.H{"message": "chat history message deleted"})
 }
 
+
+
+
+
 // parseDateQuery accepts either a full RFC3339 timestamp or a bare
 // YYYY-MM-DD date for from_date/to_date, returning nil (no filter,
 // silently ignored) rather than failing the request on a malformed value.

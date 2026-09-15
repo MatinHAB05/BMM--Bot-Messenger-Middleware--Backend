@@ -6,6 +6,7 @@ import (
 	"messenger-backend/internal/domain/entity"
 	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/datatypes"
 )
 
@@ -59,6 +60,9 @@ type ChatHistoryResponse struct {
 	MediaType         string `json:"media_type"`
 	MessageTimestamp  string `json:"message_timestamp"`
 	CreatedAt         string `json:"created_at"`
+
+	IsBroadcast   bool
+	BroadcastUUID *uuid.UUID
 }
 
 // ChatHistoryDetailResponse is returned by GET .../history/:message_id.
@@ -111,6 +115,8 @@ func ToChatHistoryResponse(message *entity.ChatHistory) ChatHistoryResponse {
 		MediaType:         message.MediaType,
 		MessageTimestamp:  message.MessageTimestamp.Format(timeLayout),
 		CreatedAt:         message.CreatedAt.Format(timeLayout),
+		IsBroadcast:       message.IsBroadcast,
+		BroadcastUUID:     message.BroadcastUUID,
 	}
 }
 

@@ -15,5 +15,6 @@ func RegisterBroadcastRoutes(v1 *gin.RouterGroup, deps Dependencies, cfg *Config
 	broadcast.Use(apimiddleware.RBAC(deps.RBACRepository, deps.Logger))
 	broadcast.Use(apimiddleware.RateLimit(deps.RateLimiterRepository, "broadcast", cfg.BroadcastPerMinute, time.Minute, deps.Logger))
 
-	broadcast.POST("", deps.BroadcastHandler.Broadcast)
+	broadcast.POST("", deps.BroadcastHandler.Send)
+	broadcast.POST("/:id", deps.BroadcastHandler.Delete)
 }

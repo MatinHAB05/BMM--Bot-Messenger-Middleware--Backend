@@ -238,7 +238,7 @@ func Init(ctx context.Context) (*App, error) {
 	directFeatChatCommandBaleHandler := balehandlers.NewDirectFeatChatCommandHandler(chatLinkService, errlog)
 	featChannelBaleHandler := balehandlers.NewFeatChannelHandler(chatLinkService, env.Bot.BaleBotUsername, errlog) // ✅ فیکس شد: BaleBotUsername
 
-	baleHandlers := balehandlers.BaleHandlers{ // ✅ فیکس شد: دیگه اسم پکیج رو شادو نمی‌کنه
+	baleHandlers := balehandlers.BaleHandlers{
 		BasicHandler:                 basicBaleHandler,
 		DirectFeatChatCommandHandler: directFeatChatCommandBaleHandler,
 		FeatChannelHandler:           featChannelBaleHandler,
@@ -247,7 +247,7 @@ func Init(ctx context.Context) (*App, error) {
 	baleDeps := balerouter.Dependencies{
 		Repositories: Repos,
 		Services:     Services,
-		BaleHandlers: baleHandlers, // ✅
+		BaleHandlers: baleHandlers,
 		Logger:       log,
 		BaleLogger:   baleLogger,
 	}

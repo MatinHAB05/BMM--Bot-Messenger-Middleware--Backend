@@ -30,10 +30,9 @@ type policyRule struct {
 // DefaultAdminPolicies contains the static RBAC permission set for admin seeding.
 var DefaultAdminPolicies = []policyRule{
 
-	// jasdhjajhdadhjahjhajdahjhjdahajhajsdhdhj
-
 	// Broadcast
 	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/broadcast", Method: "POST"}},
+	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/broadcast/:id", Method: "DELETE"}},
 
 	// Chats & Chat Histories
 	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/chats", Method: "GET"}},

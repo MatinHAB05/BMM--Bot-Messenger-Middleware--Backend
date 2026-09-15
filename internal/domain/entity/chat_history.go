@@ -3,6 +3,7 @@ package entity
 import (
 	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
@@ -22,8 +23,12 @@ type ChatHistory struct {
 	MediaType         string         `gorm:"column:media_type;size:32;default:text" json:"media_type"`
 	RawPayload        datatypes.JSON `gorm:"column:raw_payload;type:jsonb" json:"raw_payload,omitempty"`
 	MessageTimestamp  time.Time      `gorm:"column:message_timestamp;index:idx_chat_histories_chat_timestamp,priority:2" json:"message_timestamp"`
-	CreatedAt         time.Time      `json:"created_at"`
-	DeletedAt         gorm.DeletedAt `gorm:"index" json:"-"`
+
+	IsBroadcast   bool
+	BroadcastUUID *uuid.UUID `gorm:"column:broadcast_uuid"`
+
+	CreatedAt time.Time      `json:"created_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (ChatHistory) TableName() string {

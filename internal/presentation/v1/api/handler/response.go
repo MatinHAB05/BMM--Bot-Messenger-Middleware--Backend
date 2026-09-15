@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"messenger-backend/internal/domain/exception"
 	"messenger-backend/pkg/logger"
@@ -54,6 +55,14 @@ func parseIDParam(c *gin.Context, name string) (uint, error) {
 	return uint(id), nil
 }
 
+func parseUUIDParam(c *gin.Context, name string) (uuid.UUID, error) {
+	id, err := uuid.Parse(c.Param(name))
+	if err != nil {
+		return uuid.UUID{}, exception.Wrap(exception.ErrBadRequest, err)
+	}
+	return id, nil
+}
+
 // atoiOrDefault parses a query parameter as a positive int, falling back
 // to fallback on any parse error or non-positive value. Used for page/
 // page_size query params, which should never hard-fail a request.
@@ -71,4 +80,12 @@ func parseUint(s string) (uint, error) {
 		return 0, err
 	}
 	return uint(id), nil
+}
+
+func parseUUID(s string) (uuid.UUID, error) {
+	id, err := uuid.Parse(s)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	return id, nil
 }

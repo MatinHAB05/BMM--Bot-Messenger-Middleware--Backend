@@ -17,6 +17,7 @@ type MessengerClient interface {
 	// SendMessage delivers content to targetID (a chat/channel/group id,
 	// or an @username where the platform supports it).
 	SendMessage(ctx context.Context, targetID string, content string) (*MessageUpdate, error)
+	DeleteMessage(ctx context.Context, targetID string, msgID int) error
 	// Platform returns the stable lowercase identifier used throughout the
 	// API (request payloads, log fields, DB rows) to refer to this engine,
 	// e.g. "telegram" or "bale".

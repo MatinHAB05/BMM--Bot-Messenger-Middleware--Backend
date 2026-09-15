@@ -96,24 +96,48 @@ func (a *Adapter) Platform() string {
 	return a.platform
 }
 
+// SendMessage sends a text message to targetID and returns the resulting
+// MessageUpdate as reported by Telegram.
 func (a *Adapter) SendMessage(ctx context.Context, targetID string, content string) (*messenger.MessageUpdate, error) {
 	mes, err := a.bot.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID: ChatID(targetID),
 		Text:   content,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("telegram: send message to %q failed: %w", targetID, err)
+		return nil, fmt.Errorf("telegram: send message to %q: %w", targetID, err)
 	}
 
+	update, err := toMessageUpdate(mes)
+	if err != nil {
+		return nil, fmt.Errorf("telegram: convert sent message %d: %w", mes.ID, err)
+	}
+	return update, nil
+}
+
+// DeleteMessage deletes msgID from the chat identified by targetID.
+func (a *Adapter) DeleteMessage(ctx context.Context, targetID string, msgID int) error {
+	ok, err := a.bot.DeleteMessage(ctx, &tgbot.DeleteMessageParams{
+		ChatID:    targetID,
+		MessageID: msgID,
+	})
+	if err != nil {
+		return fmt.Errorf("telegram: delete message %d in %q: %w", msgID, targetID, err)
+	}
+	if !ok {
+		return fmt.Errorf("telegram: delete message %d in %q: not deleted", msgID, targetID)
+	}
+	return nil
+}
+
+// toMessageUpdate maps a Telegram message into the adapter-agnostic
+// messenger.MessageUpdate representation.
+func toMessageUpdate(mes *models.Message) (*messenger.MessageUpdate, error) {
 	senderID, senderName := MessageSender(mes)
 
-	var replyToID *int64
-	if mes.ReplyToMessage != nil {
-		id := int64(mes.ReplyToMessage.ID)
-		replyToID = &id
+	raw, err := json.Marshal(mes)
+	if err != nil {
+		return nil, fmt.Errorf("marshal raw payload: %w", err)
 	}
-
-	raw, _ := json.Marshal(mes)
 
 	return &messenger.MessageUpdate{
 		TargetID:          strconv.FormatInt(mes.Chat.ID, 10),
@@ -125,10 +149,19 @@ func (a *Adapter) SendMessage(ctx context.Context, targetID string, content stri
 		Content:           MessageContent(mes),
 		MediaType:         MessageMediaType(mes),
 		IsEdited:          false,
-		ReplyToMessageID:  replyToID,
+		ReplyToMessageID:  replyToMessageID(mes),
 		Timestamp:         time.Unix(int64(mes.Date), 0).UTC(),
 		RawPayload:        raw,
 	}, nil
+}
+
+// replyToMessageID extracts the ID of the message being replied to, if any.
+func replyToMessageID(mes *models.Message) *int64 {
+	if mes.ReplyToMessage == nil {
+		return nil
+	}
+	id := int64(mes.ReplyToMessage.ID)
+	return &id
 }
 
 func (a *Adapter) Listen(ctx context.Context) {

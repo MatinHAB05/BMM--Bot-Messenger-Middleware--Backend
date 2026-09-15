@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"messenger-backend/internal/domain/entity"
+
+	"github.com/google/uuid"
 )
 
 // ChatHistoryFilter narrows a paginated history query. Zero-valued fields
@@ -27,4 +29,5 @@ type ChatHistoryRepository interface {
 	FindByPlatformMessgeID(ctx context.Context, chatID, platformMessageID uint) (*entity.ChatHistory, error)
 	List(ctx context.Context, chatID uint, filter ChatHistoryFilter, offset, limit int) ([]entity.ChatHistory, *int64, error)
 	Delete(ctx context.Context, chatID, messageID uint) error
+	GetByBroadcastMsgID(ctx context.Context, broadcastMsgUUID uuid.UUID, chatID uint) (*entity.ChatHistory, error)
 }

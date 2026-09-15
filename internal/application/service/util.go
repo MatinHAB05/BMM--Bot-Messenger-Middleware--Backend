@@ -18,6 +18,22 @@ func parseUint(s string) (uint, error) {
 	return uint(id), nil
 }
 
+func parseUint64(s string) (uint64, error) {
+	id, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func parseInt64(s string) (int64, error) {
+	id, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
 func timeToPrettyFormat(d time.Duration) string {
 	if d == 0 {
 		return "0s"

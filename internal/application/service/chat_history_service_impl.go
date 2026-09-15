@@ -40,6 +40,7 @@ func (s *chatHistoryService) Create(ctx context.Context, message *service_contra
 		MediaType:         message.MediaType,
 		RawPayload:        message.RawPayload,
 		MessageTimestamp:  message.MessageTimestamp,
+
 	}
 	if err := s.chatHistoryRepo.Create(ctx, mess); err != nil {
 		return nil, exception.Wrap(exception.ErrInternal, err)
@@ -63,6 +64,7 @@ func (s *chatHistoryService) Upsert(ctx context.Context, message *service_contra
 		MediaType:         message.MediaType,
 		RawPayload:        message.RawPayload,
 		MessageTimestamp:  message.MessageTimestamp,
+
 	}
 	m, err := s.chatHistoryRepo.FindByPlatformMessgeID(ctx, mess.ChatID, uint(message.PlatformMessageID))
 
