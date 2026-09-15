@@ -114,6 +114,23 @@ func (a *Adapter) SendMessage(ctx context.Context, targetID string, content stri
 	return update, nil
 }
 
+func (a *Adapter) EditMessageText(ctx context.Context, targetID string, msgID int, content string) (*messenger.MessageUpdate, error) {
+	mes, err := a.bot.EditMessageText(ctx, &tgbot.EditMessageTextParams{
+		ChatID:    targetID,
+		MessageID: msgID,
+		Text:      content,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("telegram: update message from chat %q - msgid %d: %w", targetID, msgID, err)
+	}
+
+	update, err := toMessageUpdate(mes)
+	if err != nil {
+		return nil, fmt.Errorf("telegram: convert sent message %d: %w", mes.ID, err)
+	}
+	return update, nil
+}
+
 // DeleteMessage deletes msgID from the chat identified by targetID.
 func (a *Adapter) DeleteMessage(ctx context.Context, targetID string, msgID int) error {
 	ok, err := a.bot.DeleteMessage(ctx, &tgbot.DeleteMessageParams{

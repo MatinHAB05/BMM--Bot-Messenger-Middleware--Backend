@@ -18,6 +18,8 @@ type MessengerClient interface {
 	// or an @username where the platform supports it).
 	SendMessage(ctx context.Context, targetID string, content string) (*MessageUpdate, error)
 	DeleteMessage(ctx context.Context, targetID string, msgID int) error
+	EditMessageText(ctx context.Context, targetID string, msgID int, content string) (*MessageUpdate, error)
+
 	// Platform returns the stable lowercase identifier used throughout the
 	// API (request payloads, log fields, DB rows) to refer to this engine,
 	// e.g. "telegram" or "bale".

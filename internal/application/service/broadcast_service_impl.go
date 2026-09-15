@@ -367,3 +367,103 @@ func (s *broadcastService) DeleteBroadcast(ctx context.Context, companyID uint, 
 	}
 	return nil
 }
+
+func (s *broadcastService) UpdateBroadcast(ctx context.Context, companyID uint, broadcastMsgUUID uuid.UUID, req service_contract.UpdateBroadcastRequest) error {
+	if len(req.Platforms) == 0 {
+		return exception.Wrap(exception.ErrInternal, fmt.Errorf("no platforms specified"))
+	}
+	if err := s.validatePlatforms(req.Platforms); err != nil {
+		return err
+	}
+
+	platformChats, _, err := s.chatRepo.GetAllChatsContainsBroadcastMsgUUID(ctx, companyID, broadcastMsgUUID, req.Platforms)
+	if err != nil {
+		return exception.Wrap(exception.ErrInternal, err)
+	}
+
+	handle := func(ctx context.Context, job broadcastJob) jobResult {
+		client := s.clients[job.platform]
+		target := targetFromChat(job.chat)
+
+		brmsg, err := s.chatHisRepo.GetByBroadcastMsgID(ctx, broadcastMsgUUID, job.chat.ID)
+		if err != nil {
+			s.log.Error(err, "broadcast delete: history lookup failed",
+				logger.String("platform", job.platform),
+				logger.String("target_id", job.chat.PlatformChatID),
+			)
+			return jobResult{
+				result: service_contract.BroadcastResult{
+					Platform: job.platform,
+					Success:  false,
+					Error:    []string{err.Error()},
+				},
+				target: target,
+			}
+
+		}
+
+		if _, err := client.EditMessageText(ctx, job.chat.PlatformChatID, int(brmsg.PlatformMessageID), req.NewMessge.Content); err != nil {
+			s.log.Error(err, "broadcast delete: platform delete failed",
+				logger.String("platform", job.platform),
+				logger.String("target_id", job.chat.PlatformChatID),
+			)
+			return jobResult{
+				result: service_contract.BroadcastResult{
+					Platform: job.platform,
+					Success:  false,
+					Error:    []string{err.Error()},
+				},
+				target: target,
+			}
+		}
+
+		s.log.Info("broadcast message deleted",
+			logger.String("platform", job.platform),
+			logger.String("target_id", job.chat.PlatformChatID),
+		)
+
+		result := service_contract.BroadcastResult{
+			Platform: job.platform,
+			Success:  true,
+		}
+
+		////
+		brmsg.Content = req.NewMessge.Content
+		////
+
+		if err := s.chatHisRepo.Upsert(ctx, brmsg); err != nil {
+			// The platform message was deleted; only the local
+			// history row failed to update. Surface as a partial
+			// failure so it can be reconciled later.
+			result.Success = false
+			result.Error = []string{err.Error()}
+			s.log.Error(err, "broadcast delete: history cleanup failed",
+				logger.String("platform", job.platform),
+				logger.String("target_id", job.chat.PlatformChatID),
+			)
+			// todo: mq to retry cleaning up history for delivered-delete-but-unrecorded rows
+			s.log.Warn("message deleted on platform but history row not cleaned up; retry/reconciliation needed",
+				logger.String("platform", job.platform),
+				logger.String("target_id", job.chat.PlatformChatID),
+			)
+		}
+
+		return jobResult{result: result, target: target}
+	}
+
+	results, _ := s.runJobs(ctx, platformChats, handle)
+
+	var failures int
+	for _, r := range results {
+		if !r.Success {
+			failures++
+		}
+	}
+	if failures > 0 {
+		return exception.Wrap(
+			exception.ErrInternal,
+			fmt.Errorf("%d/%d broadcast delete targets failed", failures, len(results)),
+		)
+	}
+	return nil
+}

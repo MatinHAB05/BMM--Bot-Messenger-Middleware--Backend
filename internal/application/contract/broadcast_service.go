@@ -15,6 +15,11 @@ type DeleteBroadcastRequest struct {
 	Platforms []string `json:"platforms" binding:"required"`
 }
 
+type UpdateBroadcastRequest struct {
+	Platforms []string             `json:"platforms" binding:"required"`
+	NewMessge UpdateChatHisRequest `json:"message" binding:"required"`
+}
+
 type BroadcastResult struct {
 	Platform string   `json:"platform"`
 	Success  bool     `json:"success"`
@@ -37,4 +42,5 @@ type BroadcastResponse struct {
 type BroadcastService interface {
 	Broadcast(ctx context.Context, companyID uint, req BroadcastRequest) (*BroadcastResponse, error)
 	DeleteBroadcast(ctx context.Context, companyID uint, broadcastMsgUUID uuid.UUID, req DeleteBroadcastRequest) error
+	UpdateBroadcast(ctx context.Context, companyID uint, broadcastMsgUUID uuid.UUID, req UpdateBroadcastRequest) error
 }

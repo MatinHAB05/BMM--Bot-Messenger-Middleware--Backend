@@ -35,6 +35,10 @@ type CreateMessageRequest struct {
 	MessageTimestamp  time.Time      ` json:"message_timestamp"`
 }
 
+type UpdateChatHisRequest struct {
+	Content string ` json:"content,omitempty"`
+}
+
 // ChatHistoryListQuery carries GET /api/v1/chats/:id/history's pagination
 // and filters.
 type ChatHistoryListQuery struct {

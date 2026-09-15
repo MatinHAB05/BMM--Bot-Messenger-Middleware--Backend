@@ -33,6 +33,7 @@ var DefaultAdminPolicies = []policyRule{
 	// Broadcast
 	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/broadcast", Method: "POST"}},
 	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/broadcast/:id", Method: "DELETE"}},
+	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/broadcast/:id", Method: "PUT"}},
 
 	// Chats & Chat Histories
 	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/chats", Method: "GET"}},

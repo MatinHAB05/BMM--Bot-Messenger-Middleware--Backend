@@ -17,4 +17,5 @@ func RegisterBroadcastRoutes(v1 *gin.RouterGroup, deps Dependencies, cfg *Config
 
 	broadcast.POST("", deps.BroadcastHandler.Send)
 	broadcast.DELETE("/:id", deps.BroadcastHandler.Delete)
+	broadcast.PUT("/:id", deps.BroadcastHandler.Update)
 }
