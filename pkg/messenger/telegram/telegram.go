@@ -54,7 +54,8 @@ type TelegramHandler func(ctx context.Context, bot *tgbot.Bot, update *models.Up
 type RouterFunc func(b *tgbot.Bot)
 
 type Adapter struct {
-	bot *tgbot.Bot
+	bot      *tgbot.Bot
+	platform string
 }
 
 // Bot exposes the underlying tgbot.Bot instance for external usage.
@@ -86,8 +87,13 @@ func NewAdapter(token string, onUpdate UpdateHandler, onMessage MessageHandler, 
 	return a, nil
 }
 
+func (a *Adapter) SetPlatform(platform string) string {
+	a.platform = platform
+	return a.platform
+}
+
 func (a *Adapter) Platform() string {
-	return "telegram"
+	return a.platform
 }
 
 func (a *Adapter) SendMessage(ctx context.Context, targetID string, content string) (*messenger.MessageUpdate, error) {
@@ -265,9 +271,9 @@ func ExtractMessage(update *models.Update) (MessageUpdate, bool) {
 // MessageSender resolves a sender identity from a message.
 func MessageSender(msg *models.Message) (id string, name string) {
 	switch {
-	case msg.From != nil:
+	case msg.From != nil && msg.From.ID != 0:
 		return strconv.FormatInt(msg.From.ID, 10), UserDisplayName(*msg.From)
-	case msg.SenderChat != nil:
+	case msg.SenderChat != nil && msg.From.ID == 0:
 		return "", "?"
 		// return strconv.FormatInt(msg.SenderChat.ID, 10), chatTitle(*msg.SenderChat)
 	default:

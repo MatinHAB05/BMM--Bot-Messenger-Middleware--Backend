@@ -17,14 +17,14 @@ func FeatChatsLinkCommandRouter(update *models.Update) bool {
 
 }
 
-func FeatDeepStartGroupCommandRouter(telegramUsername string) func(update *models.Update) bool {
+func FeatDeepStartGroupCommandRouter(baleUsername string) func(update *models.Update) bool {
 	return func(update *models.Update) bool {
 		msg, _ := telegram.ExtractMessage(update)
 		if msg.IsEdited {
 			return false
 		}
 		data := msg.Content
-		return strings.HasPrefix(data, "/start"+telegram.AddSignToUsername(telegramUsername)+" ") // /start<bot-username> <otp-code>
+		return strings.HasPrefix(data, "/start"+telegram.AddSignToUsername(baleUsername)+" ") // /start<bot-username> <otp-code>
 	}
 }
 

@@ -13,6 +13,10 @@ rm -f logs/telegram/*.log
 echo "clear telegram logs succusfully"
 
 
+rm -f logs/bale/*.log
+echo "clear bale logs succusfully" 
+
+######################################################33
 rm -f clean-logs/app/*.log
 echo "clear app logs succusfully"
 
@@ -25,4 +29,7 @@ echo "clear elastic logs succusfully"
 
 rm -f clean-logs/telegram/*.log
 echo "clear telegram logs succusfully"
+
+rm -f clean-logs/bale/*.log
+echo "clear bale logs succusfully"
 

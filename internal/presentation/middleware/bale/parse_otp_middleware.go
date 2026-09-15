@@ -183,7 +183,7 @@ func (p *LinkCommandParser) Parse(text string) (string, error) {
 // =========================================// =========================================// =========================================
 
 type DeppStartGroupChatCompanyCommandParser struct {
-	TelegramUsername string
+	BaleUsername string
 }
 
 func (p *DeppStartGroupChatCompanyCommandParser) Parse(text string) (string, error) {
@@ -197,7 +197,7 @@ func (p *DeppStartGroupChatCompanyCommandParser) Parse(text string) (string, err
 
 	cmd := args[0]
 
-	expectedCmdWithUsername := fmt.Sprintf("/start@%s", strings.TrimPrefix(p.TelegramUsername, "@"))
+	expectedCmdWithUsername := fmt.Sprintf("/start@%s", strings.TrimPrefix(p.BaleUsername, "@"))
 
 	if cmd != expectedCmdWithUsername {
 		return "", exception.ErrBadRequest

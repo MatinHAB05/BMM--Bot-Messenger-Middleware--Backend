@@ -34,7 +34,10 @@ func New(deps Dependencies, cfg *Config) (*telegram.Adapter, error) {
 		bot.WithDebug(),
 	}
 
-	telegramAdapter, err := telegram.NewAdapter(cfg.Token, deps.BasicHandler.OnUpdate, deps.BasicHandler.OnMessage, telegramOpts, setupRouting(deps, cfg))
+	telegramAdapter, err := telegram.
+		NewAdapter(cfg.Token, deps.BasicHandler.OnUpdate, deps.BasicHandler.OnMessage, telegramOpts, setupRouting(deps, cfg))
+	telegramAdapter.SetPlatform("telegram")
+
 	if err != nil {
 		return nil, err
 	}

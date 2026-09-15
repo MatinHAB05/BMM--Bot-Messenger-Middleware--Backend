@@ -53,7 +53,7 @@ type AdminConfig struct {
 	CompanyName string `mapstructure:"ADMIN_COMPANY_NAME" json:"admin_company_name"`
 	CompanyCode string `mapstructure:"ADMIN_COMPANY_CODE" json:"admin_company_code"`
 
-	Chats string `mapstructure:"ADMIN_CHATS" json:"-"`
+	Chats string ` json:"chats"`
 }
 
 type RateLimitConfig struct {
@@ -121,6 +121,13 @@ func LoadEnvironment() *Environment {
 	if err := v.Unmarshal(&env); err != nil {
 		log.Fatalf("Failed to unmarshal environment config: %v", err)
 	}
+
+	rawChats, err := os.ReadFile("./adminchats.env.json")
+	if err != nil {
+		log.Fatalf("Failed to read-admin-chats: %v", err)
+	}
+	chats := string(rawChats)
+	env.Admin.Chats = chats
 
 	printConfig(&env)
 

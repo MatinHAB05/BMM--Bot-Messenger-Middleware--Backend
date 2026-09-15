@@ -5,6 +5,7 @@
 
 # Environment
 .env
+adminchats.env.json
 
 # Runtime log output -- both directories are kept in git via .gitkeep,
 # but their generated *.log content never is (clean-logs is explicitly
@@ -13,9 +14,11 @@
 logs/app/*.log
 logs/error/*.log
 logs/telegram/*.log
+logs/bale/*.log
 clean-logs/app/*.log
 clean-logs/error/*.log
 clean-logs/telegram/*.log
+clean-logs/bale/*.log
 
 # Go
 *.test

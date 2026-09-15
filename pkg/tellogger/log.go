@@ -33,9 +33,9 @@ func formatTelegramJSON(rawJSON string) string {
 	return string(prettyBytes)
 }
 
-func NewLogger(cmdLog bool) (Logger, CloseFileLogger) {
-	logsDir := "logs/telegram"
-	cleanlogsDir := "clean-logs/telegram"
+func NewLogger(cmdLog bool, postfix string) (Logger, CloseFileLogger) {
+	logsDir := "logs/" + postfix
+	cleanlogsDir := "clean-logs/" + postfix
 
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		log.Fatalf("ERR: Failed to create logs directory: %v", err)

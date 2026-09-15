@@ -30,14 +30,12 @@ import (
 	infrarepo "messenger-backend/internal/infrastructure/repository"
 	"messenger-backend/internal/infrastructure/seed"
 	apimiddleware "messenger-backend/internal/presentation/middleware/api"
-	balemiddleware "messenger-backend/internal/presentation/middleware/bale" // ✅ اضافه شد -- اگر مسیر واقعی پکیج فرق دارد، این را اصلاح کن
+	balemiddleware "messenger-backend/internal/presentation/middleware/bale"
 	telegrammiddleware "messenger-backend/internal/presentation/middleware/telegram"
 	apihandler "messenger-backend/internal/presentation/v1/api/handler"
 	apirouter "messenger-backend/internal/presentation/v1/api/router"
 	balehandlers "messenger-backend/internal/presentation/v1/bale/handler"
 	balerouter "messenger-backend/internal/presentation/v1/bale/router"
-	telegramhandlers "messenger-backend/internal/presentation/v1/telegram/handler"
-	telegramrouter "messenger-backend/internal/presentation/v1/telegram/router"
 
 	"messenger-backend/pkg/logger"
 	"messenger-backend/pkg/messenger"
@@ -80,7 +78,8 @@ func Init(ctx context.Context) (*App, error) {
 		return nil, fmt.Errorf("init logger: %w", err)
 	}
 
-	telLogger, _ := tellogger.NewLogger(false)
+	// telLogger, _ := tellogger.NewLogger(false, "telegram")
+	baleLogger, _ := tellogger.NewLogger(false, "bale")
 
 	if env.Auth.PasetoSymmetricKey == "" {
 		return nil, fmt.Errorf("PASETO_SYMMETRIC_KEY is not set (generate one with `openssl rand -hex 32`)")
@@ -212,27 +211,27 @@ func Init(ctx context.Context) (*App, error) {
 
 	// platforms handlers
 	//Telegram :
-	basicTelegramHandler := telegramhandlers.NewBasicHandler(chatService, chatHisService, log, errlog)
-	directFeatChatCommandTelegramHandler := telegramhandlers.NewDirectFeatChatCommandHandler(chatLinkService, errlog)
-	featChannelTelegramHandler := telegramhandlers.NewFeatChannelHandler(chatLinkService, env.Bot.TelegramBotUsername, errlog)
+	// basicTelegramHandler := telegramhandlers.NewBasicHandler(chatService, chatHisService, log, errlog)
+	// directFeatChatCommandTelegramHandler := telegramhandlers.NewDirectFeatChatCommandHandler(chatLinkService, errlog)
+	// featChannelTelegramHandler := telegramhandlers.NewFeatChannelHandler(chatLinkService, env.Bot.TelegramBotUsername, errlog)
 
-	telegramHandlers := telegramhandlers.TelegramHandlers{
-		BasicHandler:                 basicTelegramHandler,
-		DirectFeatChatCommandHandler: directFeatChatCommandTelegramHandler,
-		FeatChannelHandler:           featChannelTelegramHandler,
-	}
+	// telegramHandlers := telegramhandlers.TelegramHandlers{
+	// 	BasicHandler:                 basicTelegramHandler,
+	// 	DirectFeatChatCommandHandler: directFeatChatCommandTelegramHandler,
+	// 	FeatChannelHandler:           featChannelTelegramHandler,
+	// }
 
-	telegramDeps := telegramrouter.Dependencies{
-		Repositories:     Repos,
-		Services:         Services,
-		TelegramHandlers: telegramHandlers,
-		Logger:           log,
-		TelLogger:        telLogger,
-	}
-	telegramCfg := telegramrouter.Config{
-		Token:       env.Bot.TelegramBotToken,
-		BotUsername: env.Bot.TelegramBotUsername,
-	}
+	// telegramDeps := telegramrouter.Dependencies{
+	// 	Repositories:     Repos,
+	// 	Services:         Services,
+	// 	TelegramHandlers: telegramHandlers,
+	// 	Logger:           log,
+	// 	TelLogger:        telLogger,
+	// }
+	// telegramCfg := telegramrouter.Config{
+	// 	Token:       env.Bot.TelegramBotToken,
+	// 	BotUsername: env.Bot.TelegramBotUsername,
+	// }
 
 	// Bale
 	basicBaleHandler := balehandlers.NewBasicHandler(chatService, chatHisService, log, errlog)
@@ -250,7 +249,7 @@ func Init(ctx context.Context) (*App, error) {
 		Services:     Services,
 		BaleHandlers: baleHandlers, // ✅
 		Logger:       log,
-		TelLogger:    telLogger,
+		BaleLogger:   baleLogger,
 	}
 	baleCfg := balerouter.Config{
 		Token:       env.Bot.BaleBotToken,
@@ -262,18 +261,18 @@ func Init(ctx context.Context) (*App, error) {
 	// just one platform (or neither, for local development without bots).
 	var clients []messenger.MessengerClient
 
-	var telegramAdapter *telegram.Adapter
+	// var telegramAdapter *telegram.Adapter
 
-	if env.Bot.TelegramBotToken != "" {
-		telegramAdapter, err = telegramrouter.New(telegramDeps, &telegramCfg)
+	// if env.Bot.TelegramBotToken != "" {
+	// 	telegramAdapter, err = telegramrouter.New(telegramDeps, &telegramCfg)
 
-		if err != nil {
-			return nil, fmt.Errorf("init telegram adapter: %w", err)
-		}
-		clients = append(clients, telegramAdapter)
-	} else {
-		log.Warn("TELEGRAM_BOT_TOKEN not set -- Telegram engine disabled")
-	}
+	// 	if err != nil {
+	// 		return nil, fmt.Errorf("init telegram adapter: %w", err)
+	// 	}
+	// 	clients = append(clients, telegramAdapter)
+	// } else {
+	// 	log.Warn("TELEGRAM_BOT_TOKEN not set -- Telegram engine disabled")
+	// }
 
 	var baleAdapter *telegram.Adapter
 
@@ -342,7 +341,7 @@ func Init(ctx context.Context) (*App, error) {
 			BroadcastPerMinute: env.RateLimit.BroadcastPerMinute,
 		}),
 
-		telegramAdapter: telegramAdapter,
+		telegramAdapter: nil,         //for debug bale
 		baleAdapter:     baleAdapter, // ✅ فیکس شد: دیگه nil نیست و کامنت مرده پاک شد
 	}, nil
 }

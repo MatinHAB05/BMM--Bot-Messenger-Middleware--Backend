@@ -29,8 +29,8 @@ func NewBasicHandler(
 	return &BasicHandler{
 		chatService:        chatService,
 		chatHistoryService: chatHistoryService,
-		log:                log.With(logger.String("component", "BasicHandler_Telegram")),
-		errLog:             errLog.With(logger.String("component", "BasicHandler_Telegram")),
+		log:                log.With(logger.String("component", "BasicHandler_Bale")),
+		errLog:             errLog.With(logger.String("component", "BasicHandler_Bale")),
 	}
 }
 
@@ -39,11 +39,11 @@ func NewBasicHandler(
 // with no companyID/plan, since ingestion happens outside the tenant scope
 // and company assignment is a separate step (see ChatService.HalfCreate).
 func (h *BasicHandler) OnUpdate(ctx context.Context, u telegram.ChatUpdate) {
-	h.log.Debug("telegram onUpdate entry", logger.String("target_id", u.TargetID))
+	h.log.Debug("bale onUpdate entry", logger.String("target_id", u.TargetID))
 
-	if _, err := h.chatService.GetByPlatformID(ctx, string(entity.PlatformTelegram), u.TargetID); err == nil {
+	if _, err := h.chatService.GetByPlatformID(ctx, string(entity.PlatformBale), u.TargetID); err == nil {
 		// Chat already exists. TODO: diff title/username/etc and Update() if changed.
-		h.log.Debug("telegram chat already exists", logger.String("target_id", u.TargetID))
+		h.log.Debug("bale chat already exists", logger.String("target_id", u.TargetID))
 		return
 	} else if !errors.Is(err, exception.ErrChatNotFound) {
 		h.errLog.Error(
@@ -55,7 +55,7 @@ func (h *BasicHandler) OnUpdate(ctx context.Context, u telegram.ChatUpdate) {
 	}
 
 	if _, err := h.chatService.HalfCreate(ctx, service_contract.CreateChatRequest{
-		Platform:       string(entity.PlatformTelegram),
+		Platform:       string(entity.PlatformBale),
 		PlatformChatID: u.TargetID,
 		Title:          u.Title,
 		Username:       u.Username,
@@ -106,7 +106,7 @@ func (h *BasicHandler) OnMessage(ctx context.Context, msg telegram.MessageUpdate
 // findOrHalfCreateChat centralizes the "get by platform id, half-create if
 // missing" pattern shared by both handlers above.
 func (h *BasicHandler) findOrHalfCreateChat(ctx context.Context, platformChatID, title, chatType string) (*service_contract.ChatResponse, error) {
-	chat, err := h.chatService.GetByPlatformID(ctx, string(entity.PlatformTelegram), platformChatID)
+	chat, err := h.chatService.GetByPlatformID(ctx, string(entity.PlatformBale), platformChatID)
 	if err == nil {
 		return chat, nil
 	}
@@ -115,7 +115,7 @@ func (h *BasicHandler) findOrHalfCreateChat(ctx context.Context, platformChatID,
 	}
 
 	return h.chatService.HalfCreate(ctx, service_contract.CreateChatRequest{
-		Platform:       string(entity.PlatformTelegram),
+		Platform:       string(entity.PlatformBale),
 		PlatformChatID: platformChatID,
 		Title:          title,
 		ChatType:       normalizeChatType(chatType),
@@ -123,10 +123,10 @@ func (h *BasicHandler) findOrHalfCreateChat(ctx context.Context, platformChatID,
 	})
 }
 
-func normalizeChatType(telegramChatType string) string {
-	switch telegramChatType {
+func normalizeChatType(baleChatType string) string {
+	switch baleChatType {
 	case "group", "supergroup", "channel":
-		return telegramChatType
+		return baleChatType
 	default:
 		return "group"
 	}

@@ -8,7 +8,7 @@ import (
 	service_contract "messenger-backend/internal/application/contract"
 	"messenger-backend/internal/domain/entity"
 	"messenger-backend/internal/domain/exception"
-	telegrammiddleware "messenger-backend/internal/presentation/middleware/telegram"
+	balemiddleware "messenger-backend/internal/presentation/middleware/bale"
 	"messenger-backend/pkg/logger"
 
 	"github.com/go-telegram/bot"
@@ -29,12 +29,12 @@ func NewFeatChannelHandler(
 	return &FeatChannelHandler{
 		chatLinkService: chatLinkService,
 		botUsername:     botUsername,
-		errLog:          errLog.With(logger.String("component", "FeatChannelHandler_Telegram")),
+		errLog:          errLog.With(logger.String("component", "FeatChannelHandler_Bale")),
 	}
 }
 
 func (h *FeatChannelHandler) SetChannelPendingDeepStartChannelCommand(ctx context.Context, b *bot.Bot, update *models.Update) {
-	info, ok := telegrammiddleware.GetDeepStartChannelOTP(ctx)
+	info, ok := balemiddleware.GetDeepStartChannelOTP(ctx)
 	if !ok {
 		h.errLog.Error(exception.ErrMiddlewareTokensAssetion, "failed to retrieve deep start channel OTP info from middleware context", logger.Any("otp_info", info))
 		return
@@ -46,7 +46,7 @@ func (h *FeatChannelHandler) SetChannelPendingDeepStartChannelCommand(ctx contex
 
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: info.PlatformChatID,
-		Text:   "Welcome!\nWe're ready to connect your Telegram channel to your company dashboard.\n\nClick the button below to select your channel and grant the bot administrative access.",
+		Text:   "Welcome!\nWe're ready to connect your Bale channel to your company dashboard.\n\nClick the button below to select your channel and grant the bot administrative access.",
 		ReplyMarkup: models.InlineKeyboardMarkup{
 			InlineKeyboard: [][]models.InlineKeyboardButton{
 				{
@@ -61,7 +61,7 @@ func (h *FeatChannelHandler) SetChannelPendingDeepStartChannelCommand(ctx contex
 }
 
 func (h *FeatChannelHandler) RegisterChannelAcceptance(ctx context.Context, b *bot.Bot, update *models.Update) {
-	joinedChatID, approverUserID, ok := telegrammiddleware.GetBotJoinedChannelInfo(ctx)
+	joinedChatID, approverUserID, ok := balemiddleware.GetBotJoinedChannelInfo(ctx)
 	if !ok {
 		h.errLog.Error(exception.ErrMiddlewareTokensAssetion, "failed to retrieve bot joined channel info from middleware context")
 		return
@@ -70,7 +70,7 @@ func (h *FeatChannelHandler) RegisterChannelAcceptance(ctx context.Context, b *b
 	platformChatID := strconv.FormatInt(joinedChatID, 10)
 	approverID := strconv.FormatInt(approverUserID, 10)
 
-	if _, err := h.chatLinkService.ConfirmChannelLink(ctx, string(entity.PlatformTelegram), platformChatID, approverID); err != nil {
+	if _, err := h.chatLinkService.ConfirmChannelLink(ctx, string(entity.PlatformBale), platformChatID, approverID); err != nil {
 		return
 	}
 

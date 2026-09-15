@@ -3,7 +3,7 @@ package balerouter
 import (
 	service_contract "messenger-backend/internal/application/contract"
 	repository_contract "messenger-backend/internal/domain/repository"
-	telegrammiddleware "messenger-backend/internal/presentation/middleware/telegram"
+	balemiddleware "messenger-backend/internal/presentation/middleware/bale"
 	balehandlers "messenger-backend/internal/presentation/v1/bale/handler"
 	"messenger-backend/pkg/logger"
 	"messenger-backend/pkg/messenger/telegram"
@@ -24,44 +24,47 @@ type Dependencies struct {
 	service_contract.Services
 	balehandlers.BaleHandlers
 
-	Logger    logger.Logger
-	TelLogger tellogger.Logger
+	Logger     logger.Logger
+	BaleLogger tellogger.Logger
 }
 
 func New(deps Dependencies, cfg *Config) (*telegram.Adapter, error) {
-	telegramOpts := []bot.Option{
-		bot.WithDebugHandler(bot.DebugHandler(deps.TelLogger)),
+	baleOpts := []bot.Option{
+		bot.WithServerURL("https://tapi.bale.ai"),
+		bot.WithDebugHandler(bot.DebugHandler(deps.BaleLogger)),
 		bot.WithDebug(),
 	}
 
-	telegramAdapter, err := telegram.NewAdapter(cfg.Token, deps.BasicHandler.OnUpdate, deps.BasicHandler.OnMessage, telegramOpts, setupRouting(deps, cfg))
+	baleAdapter, err := telegram.NewAdapter(cfg.Token, deps.BasicHandler.OnUpdate, deps.BasicHandler.OnMessage, baleOpts, setupRouting(deps, cfg))
+	baleAdapter.SetPlatform("bale")
+
 	if err != nil {
 		return nil, err
 	}
 
-	return telegramAdapter, nil
+	return baleAdapter, nil
 }
 func setupRouting(deps Dependencies, cfg *Config) func(b *bot.Bot) {
 	return func(b *bot.Bot) {
 		// 1
-		parseLinkOTPMiddleware := telegrammiddleware.ParseLinkOTPMiddleware(&telegrammiddleware.LinkCommandParser{})
+		parseLinkOTPMiddleware := balemiddleware.ParseLinkOTPMiddleware(&balemiddleware.LinkCommandParser{})
 		featChatsLinkCommandRouter := FeatChatsLinkCommandRouter
 		b.RegisterHandlerMatchFunc(featChatsLinkCommandRouter, deps.DirectFeatChatCommandHandler.FeatChatsLinkCommand, parseLinkOTPMiddleware)
 
 		// 2
-		parseDeepStartGroupOTPMiddleware := telegrammiddleware.ParseDeepStartGroupOTPMiddleware(&telegrammiddleware.DeppStartGroupChatCompanyCommandParser{
-			TelegramUsername: cfg.BotUsername,
+		parseDeepStartGroupOTPMiddleware := balemiddleware.ParseDeepStartGroupOTPMiddleware(&balemiddleware.DeppStartGroupChatCompanyCommandParser{
+			BaleUsername: cfg.BotUsername,
 		})
 		featDeepStartGroupCommandRouter := FeatDeepStartGroupCommandRouter(cfg.BotUsername)
 		b.RegisterHandlerMatchFunc(featDeepStartGroupCommandRouter, deps.FeatDeepStartGroupCommand, parseDeepStartGroupOTPMiddleware)
 
 		// 3
-		parseDeepStartChannelOTPMiddleware := telegrammiddleware.ParseDeepStartChannelOTPMiddleware(&telegrammiddleware.DeppStartChannelChatCompanyCommandParser{})
+		parseDeepStartChannelOTPMiddleware := balemiddleware.ParseDeepStartChannelOTPMiddleware(&balemiddleware.DeppStartChannelChatCompanyCommandParser{})
 		setChannelPendingDeepStartChannelCommandRouter := SetChannelPendingDeepStartChannelRouter
 		b.RegisterHandlerMatchFunc(setChannelPendingDeepStartChannelCommandRouter, deps.SetChannelPendingDeepStartChannelCommand, parseDeepStartChannelOTPMiddleware)
 
 		// 4
-		botJoinedChannelMiddleware := telegrammiddleware.BotJoinedChannelMiddleware()
+		botJoinedChannelMiddleware := balemiddleware.BotJoinedChannelMiddleware()
 		registerChanneltAcceptnessRouter := RegisterChanneltAcceptnessRouter
 		b.RegisterHandlerMatchFunc(registerChanneltAcceptnessRouter, deps.RegisterChannelAcceptance, botJoinedChannelMiddleware)
 	}

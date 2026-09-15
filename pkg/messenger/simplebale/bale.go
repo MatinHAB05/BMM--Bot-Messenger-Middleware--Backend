@@ -4,7 +4,7 @@
 // implements its own HTTP client and payload types rather than reusing
 // pkg/messenger/telegram -- the two engines are fully decoupled and share
 // no code, only the pkg/messenger.MessengerClient contract.
-package bale
+package simplebale
 
 import (
 	"bytes"
