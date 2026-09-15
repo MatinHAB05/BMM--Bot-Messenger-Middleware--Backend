@@ -1,4 +1,4 @@
-package telegramhandlers
+package balehandlers
 
 import (
 	"context"

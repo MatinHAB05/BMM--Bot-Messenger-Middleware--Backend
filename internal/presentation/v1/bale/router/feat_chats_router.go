@@ -1,4 +1,4 @@
-package telegramrouter
+package balerouter
 
 import (
 	"messenger-backend/pkg/messenger/telegram"

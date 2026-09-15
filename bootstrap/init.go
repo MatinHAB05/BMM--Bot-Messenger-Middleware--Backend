@@ -30,15 +30,17 @@ import (
 	infrarepo "messenger-backend/internal/infrastructure/repository"
 	"messenger-backend/internal/infrastructure/seed"
 	apimiddleware "messenger-backend/internal/presentation/middleware/api"
+	balemiddleware "messenger-backend/internal/presentation/middleware/bale" // ✅ اضافه شد -- اگر مسیر واقعی پکیج فرق دارد، این را اصلاح کن
 	telegrammiddleware "messenger-backend/internal/presentation/middleware/telegram"
 	apihandler "messenger-backend/internal/presentation/v1/api/handler"
 	apirouter "messenger-backend/internal/presentation/v1/api/router"
+	balehandlers "messenger-backend/internal/presentation/v1/bale/handler"
+	balerouter "messenger-backend/internal/presentation/v1/bale/router"
 	telegramhandlers "messenger-backend/internal/presentation/v1/telegram/handler"
 	telegramrouter "messenger-backend/internal/presentation/v1/telegram/router"
 
 	"messenger-backend/pkg/logger"
 	"messenger-backend/pkg/messenger"
-	"messenger-backend/pkg/messenger/bale"
 	"messenger-backend/pkg/messenger/telegram"
 	"messenger-backend/pkg/tellogger"
 	mail "messenger-backend/pkg/wneessen-go-mail"
@@ -57,7 +59,7 @@ type App struct {
 	Router *gin.Engine
 
 	telegramAdapter *telegram.Adapter
-	baleAdapter     *bale.Adapter
+	baleAdapter     *telegram.Adapter //***
 }
 
 // Init loads configuration and constructs the full dependency graph. It
@@ -177,6 +179,7 @@ func Init(ctx context.Context) (*App, error) {
 	})
 	chatHisService := appservice.NewChatHistoryService(chatRepo, chatHisRepo, log)
 	chatService := appservice.NewChatService(chatRepo, chatHisRepo, companyRepo, otpService, log)
+	chatLinkService := appservice.NewChatLinkService(chatService, otpService, channelPendingService, log, errlog)
 	companyServie := appservice.NewCompanyService(companyRepo, otpService, log)
 	rbacService := appservice.NewRBACService(rbacRepo, log)
 	userService := appservice.NewUserService(userRepo, otpService, rbacRepo, log)
@@ -185,6 +188,7 @@ func Init(ctx context.Context) (*App, error) {
 		BroadcastService:      nil, // fill it after create mess adapters
 		ChannelPendingService: channelPendingService,
 		ChatHistoryService:    chatHisService,
+		ChatLinkService:       chatLinkService,
 		ChatService:           chatService,
 		CompanyService:        companyServie,
 		OTPService:            otpService,
@@ -207,15 +211,15 @@ func Init(ctx context.Context) (*App, error) {
 	////////////////////////////////////////////////////////////////////////////////////////////
 
 	// platforms handlers
-
+	//Telegram :
 	basicTelegramHandler := telegramhandlers.NewBasicHandler(chatService, chatHisService, log, errlog)
-	directFeatChatCommandTelegramHandler := telegramhandlers.NewDirectFeatChatCommandHandler(chatService, otpService, log, errlog)
-	featChannelHandler := telegramhandlers.NewFeatChannelHandler(chatService, otpService, channelPendingService, log, errlog)
+	directFeatChatCommandTelegramHandler := telegramhandlers.NewDirectFeatChatCommandHandler(chatLinkService, errlog)
+	featChannelTelegramHandler := telegramhandlers.NewFeatChannelHandler(chatLinkService, env.Bot.TelegramBotUsername, errlog)
 
 	telegramHandlers := telegramhandlers.TelegramHandlers{
 		BasicHandler:                 basicTelegramHandler,
 		DirectFeatChatCommandHandler: directFeatChatCommandTelegramHandler,
-		FeatChannelHandler:           featChannelHandler,
+		FeatChannelHandler:           featChannelTelegramHandler,
 	}
 
 	telegramDeps := telegramrouter.Dependencies{
@@ -228,6 +232,29 @@ func Init(ctx context.Context) (*App, error) {
 	telegramCfg := telegramrouter.Config{
 		Token:       env.Bot.TelegramBotToken,
 		BotUsername: env.Bot.TelegramBotUsername,
+	}
+
+	// Bale
+	basicBaleHandler := balehandlers.NewBasicHandler(chatService, chatHisService, log, errlog)
+	directFeatChatCommandBaleHandler := balehandlers.NewDirectFeatChatCommandHandler(chatLinkService, errlog)
+	featChannelBaleHandler := balehandlers.NewFeatChannelHandler(chatLinkService, env.Bot.BaleBotUsername, errlog) // ✅ فیکس شد: BaleBotUsername
+
+	baleHandlers := balehandlers.BaleHandlers{ // ✅ فیکس شد: دیگه اسم پکیج رو شادو نمی‌کنه
+		BasicHandler:                 basicBaleHandler,
+		DirectFeatChatCommandHandler: directFeatChatCommandBaleHandler,
+		FeatChannelHandler:           featChannelBaleHandler,
+	}
+
+	baleDeps := balerouter.Dependencies{
+		Repositories: Repos,
+		Services:     Services,
+		BaleHandlers: baleHandlers, // ✅
+		Logger:       log,
+		TelLogger:    telLogger,
+	}
+	baleCfg := balerouter.Config{
+		Token:       env.Bot.BaleBotToken,
+		BotUsername: env.Bot.BaleBotUsername,
 	}
 
 	// Each messenger engine is wired independently and only enabled when
@@ -248,17 +275,18 @@ func Init(ctx context.Context) (*App, error) {
 		log.Warn("TELEGRAM_BOT_TOKEN not set -- Telegram engine disabled")
 	}
 
-	// var baleAdapter *bale.Adapter
-	// if env.Bot.BaleBotToken != "" {
-	// 	baleAdapter = bale.NewAdapter(env.Bot.BaleBotToken, func(updateCtx context.Context, u bale.ChatUpdate) {
-	// 		if err := channelService.RecordActivity(updateCtx, entity.PlatformBale, u.TargetID, u.Title, u.ChatType); err != nil {
-	// 			log.Error(err, "bale listener: failed to record channel activity", logger.String("target_id", u.TargetID))
-	// 		}
-	// 	})
-	// 	clients = append(clients, baleAdapter)
-	// } else {
-	// 	log.Warn("BALE_BOT_TOKEN not set -- Bale engine disabled")
-	// }
+	var baleAdapter *telegram.Adapter
+
+	if env.Bot.BaleBotToken != "" {
+		baleAdapter, err = balerouter.New(baleDeps, &baleCfg)
+
+		if err != nil {
+			return nil, fmt.Errorf("init bale adapter: %w", err)
+		}
+		clients = append(clients, baleAdapter)
+	} else {
+		log.Warn("BALE_BOT_TOKEN not set -- Bale engine disabled")
+	}
 
 	// ... Services
 	broadcastService := appservice.NewBroadcastService(clients, chatRepo, chatHisRepo, log, appservice.BroadcastConfig{
@@ -268,9 +296,10 @@ func Init(ctx context.Context) (*App, error) {
 	Services.BroadcastService = broadcastService
 
 	//Handlers
-	apihandler.InitErrLogger(errlog)         //**
-	apimiddleware.InitErrLogger(errlog)      //**
-	telegrammiddleware.InitErrLogger(errlog) //**
+	apihandler.InitErrLogger(errlog)
+	apimiddleware.InitErrLogger(errlog)
+	telegrammiddleware.InitErrLogger(errlog)
+	balemiddleware.InitErrLogger(errlog)
 
 	authHandler := apihandler.NewAuthHandler(authService)
 	broadcastHandler := apihandler.NewBroadcastHandler(broadcastService)
@@ -314,8 +343,7 @@ func Init(ctx context.Context) (*App, error) {
 		}),
 
 		telegramAdapter: telegramAdapter,
-		// baleAdapter:     baleAdapter,
-		baleAdapter: nil, //TODO
+		baleAdapter:     baleAdapter, // ✅ فیکس شد: دیگه nil نیست و کامنت مرده پاک شد
 	}, nil
 }
 
@@ -373,9 +401,7 @@ func (a *App) StartListeners(ctx context.Context) {
 				}
 			}()
 			a.runListenerWithRestart(ctx, "bale", func(ctx context.Context) {
-				a.baleAdapter.Listen(ctx, func(err error) {
-					a.Logger.Warn("bale listener polling error", logger.Err(err))
-				})
+				a.baleAdapter.Listen(ctx)
 			})
 		}()
 

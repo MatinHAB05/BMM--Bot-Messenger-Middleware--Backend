@@ -6,6 +6,7 @@ type Services struct {
 	AuthService
 	BroadcastService
 	ChannelPendingService
+	ChatLinkService
 	ChatHistoryService
 	ChatService
 	CompanyService

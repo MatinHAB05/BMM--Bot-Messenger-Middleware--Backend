@@ -39,8 +39,6 @@ func RateLimit(rateLimiterRepo repository_contract.RateLimiterRepository, scope 
 		count, err := rateLimiterRepo.RecordAndCount(ctx, key, member, windowStart, now, window)
 		if err != nil {
 			log.Error(err, "rate limiter execution failed", logger.String("key", key))
-			// Fail open: a transient Redis issue should degrade rate
-			// limiting, not take the whole API down with it.
 			c.Next()
 			return
 		}

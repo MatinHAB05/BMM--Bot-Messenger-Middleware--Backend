@@ -66,24 +66,3 @@ func setupRouting(deps Dependencies, cfg *Config) func(b *bot.Bot) {
 		b.RegisterHandlerMatchFunc(registerChanneltAcceptnessRouter, deps.RegisterChannelAcceptance, botJoinedChannelMiddleware)
 	}
 }
-
-func setasdadasadsasdasassaupRouting(b *bot.Bot) {
-
-	// 	otplinkHook := telegramHandler.NewOTPParseHook(&handler.LinkCommandParser{})
-	// otpdeepgroupHook := telegramHandler.NewOTPParseHook(&handler.DeppStartGroupChatCompanyCommandParser{TelegramUsername: env.Bot.TelegramBotUsername})
-	// otpdeepchannelpHook := telegramHandler.NewOTPParseHook(&handler.DeppStartChannelChatCompanyCommandParser{})
-	// sendinlinekeyboardAcceptnessHook := telegramHandler.NewOTPSendInlineKeyboardHook()
-	// sendDoneHook := telegramHandler.NewSendDoneHook()
-	// setPendingChannelRegistraionHook := telegramHandler.NewSetPendingChannelRegistraionHook()
-
-	// telegramAdapter, err = telegram.NewAdapter(
-	// 	env.Bot.TelegramBotToken,
-	// 	telegramHandler.OnUpdateTelegram,
-	// 	telegramHandler.OnMessageTelegram,
-
-	// 		b.RegisterHandlerMatchFunc(linkCommantMatchTelegram, telegramHandler.Wrap(telegramHandler.FeatChatWithOTP, otplinkHook, sendDoneHook))
-	// 		b.RegisterHandlerMatchFunc(deepstartGroupMatchTeletram(env.Bot.TelegramBotUsername), telegramHandler.Wrap(telegramHandler.FeatChatWithOTP, otpdeepgroupHook, sendDoneHook))
-	// 		b.RegisterHandlerMatchFunc(deepstartChanneltMatchTelegram, telegramHandler.Wrap(telegramHandler.FeatChatWithOTP, otpdeepchannelpHook, setPendingChannelRegistraionHook, sendinlinekeyboardAcceptnessHook))
-	// 		b.RegisterHandlerMatchFunc(deepstartChanneltAcceptnessMatchTelegram, telegramHandler.FeatJustChannelChatJoinChannel)
-
-}
