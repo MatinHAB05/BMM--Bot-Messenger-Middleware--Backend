@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"messenger-backend/internal/domain/entity"
+
+	"github.com/google/uuid"
 )
 
 // ChatFilter narrows a company's chat list. Zero-valued fields are
@@ -27,7 +29,7 @@ type ChatRepository interface {
 	// update.
 	FindByPlatformChatIDInCompany(ctx context.Context, companyID uint, platform entity.MessengerPlatform, platformChatID string) (*entity.Chat, error)
 	FindByPlatformChatID(ctx context.Context, platform entity.MessengerPlatform, platformChatID string) (*entity.Chat, error)
-
+	GetAllChatsContainsBroadcastMsgUUID(ctx context.Context, companyID uint, broadcastMsgUUID uuid.UUID, platforms []string) (map[string][]entity.Chat, *int64, error)
 	List(ctx context.Context, companyID uint, filter ChatFilter, offset, limit int) ([]entity.Chat, *int64, error)
 	ListAll(ctx context.Context, companyID uint, platforms []string) (map[string][]entity.Chat, *int64, error)
 	Update(ctx context.Context, chat *entity.Chat) error

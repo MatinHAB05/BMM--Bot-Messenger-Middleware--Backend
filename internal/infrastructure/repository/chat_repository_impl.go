@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"messenger-backend/internal/domain/entity"
@@ -218,4 +219,35 @@ func (r *chatRepository) Delete(ctx context.Context, companyID, id uint) error {
 	}
 
 	return nil
+}
+
+func (r *chatRepository) GetAllChatsContainsBroadcastMsgUUID(ctx context.Context, companyID uint, broadcastMsgUUID uuid.UUID, platforms []string) (map[string][]entity.Chat, *int64, error) {
+	// db := database.ExtractTrxOrDB(ctx, r.db)
+	db := r.db
+
+	query := db.GetGormDB().WithContext(ctx).
+		Model(&entity.Chat{}).
+		Joins("JOIN chat_histories ON chat_histories.chat_id = chats.id").
+		Where("chat_histories.broadcast_uuid = ?", broadcastMsgUUID).
+		Where("chat_histories.is_broadcast = ?", true).
+		Where("chats.company_id = ?", companyID)
+
+	if len(platforms) > 0 {
+		query = query.Where("chats.platform IN ?", platforms)
+	}
+
+	var chats []entity.Chat
+	if err := query.Find(&chats).Error; err != nil {
+		return nil, nil, fmt.Errorf("%w: %v", exception.ErrDatabaseOperation, err)
+	}
+
+	total := int64(len(chats))
+
+	platformChats := make(map[string][]entity.Chat, len(platforms))
+	for _, chat := range chats {
+		platform := string(chat.Platform)
+		platformChats[platform] = append(platformChats[platform], chat)
+	}
+
+	return platformChats, &total, nil
 }

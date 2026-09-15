@@ -280,7 +280,7 @@ func (s *broadcastService) DeleteBroadcast(ctx context.Context, companyID uint, 
 		return err
 	}
 
-	platformChats, _, err := s.chatRepo.ListAll(ctx, companyID, req.Platforms)
+	platformChats, _, err := s.chatRepo.GetAllChatsContainsBroadcastMsgUUID(ctx, companyID, broadcastMsgUUID, req.Platforms)
 	if err != nil {
 		return exception.Wrap(exception.ErrInternal, err)
 	}
@@ -303,6 +303,7 @@ func (s *broadcastService) DeleteBroadcast(ctx context.Context, companyID uint, 
 				},
 				target: target,
 			}
+
 		}
 
 		if err := client.DeleteMessage(ctx, job.chat.PlatformChatID, int(brmsg.PlatformMessageID)); err != nil {

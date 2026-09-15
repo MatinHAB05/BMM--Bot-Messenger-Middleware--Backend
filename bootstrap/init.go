@@ -185,7 +185,7 @@ func Init(ctx context.Context) (*App, error) {
 	chatLinkService := appservice.NewChatLinkService(chatService, otpService, channelPendingService, log, errlog)
 	companyServie := appservice.NewCompanyService(companyRepo, otpService, log)
 	rbacService := appservice.NewRBACService(rbacRepo, log)
-	sentbalemsgService := appservice.NewSentBaleMsgService(sentbalemsgRepo, log, appservice.SentBaleMsgServiceConfig{TTL: time.Second * 3500})
+	sentbalemsgService := appservice.NewSentBaleMsgService(sentbalemsgRepo, log, appservice.SentBaleMsgServiceConfig{TTL: time.Millisecond * 5000})
 	userService := appservice.NewUserService(userRepo, otpService, rbacRepo, log)
 	Services := service_contract.Services{
 		AuthService:           authService,
