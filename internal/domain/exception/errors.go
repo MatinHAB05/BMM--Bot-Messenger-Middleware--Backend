@@ -118,6 +118,7 @@ var (
 	ErrEnforcerNil         = &AppError{Code: "ENFORCER_NIL", Message: "enforcer instance is not initialized", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainEnforcerNil}
 	ErrRoleSyncFailed      = &AppError{Code: "ROLE_SYNC_FAILED", Message: "failed to synchronize user roles with the policy store", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainRoleSyncFailed}
 	ErrSentBaleMsgNotFound = &AppError{Code: "SENT_BALE_MSG_NOTFOUND", Message: "sent bale msg nt found", HTTPStatus: http.StatusNotFound, Err: ErrDomainSentBaleMsgNotFound}
+
 	// General & Infrastructure
 	ErrDatabaseOperation   = &AppError{Code: "DATABASE_ERROR", Message: "database operation failed", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainDatabaseOperation}
 	ErrCacheOperation      = &AppError{Code: "CACHE_ERROR", Message: "cache operation failed", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainCacheOperation}
@@ -131,6 +132,13 @@ var (
 	ErrFalsyHandlerRouting = &AppError{Code: "HANDLER_ROUTING_FAILED", Message: "failed to route handlers", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainHandlerRouting}
 	ErrComingSoon          = &AppError{Code: "COMING_SOON", Message: "this feature is not yet completed", HTTPStatus: http.StatusMethodNotAllowed, Err: ErrDomainComingSoon}
 )
+
+var ErrAttachmentNotFound = &AppError{
+	Code:       "ATTACHMENT_NOT_FOUND",
+	Message:    "attachment not found",
+	HTTPStatus: http.StatusNotFound,
+	Err:        ErrChatNotFound,
+}
 
 // ==========================================
 // 3. AppError Definition & Helper Methods

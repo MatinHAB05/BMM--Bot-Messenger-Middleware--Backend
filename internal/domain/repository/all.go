@@ -1,6 +1,7 @@
 package repository_contract
 
 type Repositories struct {
+	AttachmentRepository
 	AuthnTokenRepository
 	ChannelPendingRepository
 	ChatHistoryRepository
