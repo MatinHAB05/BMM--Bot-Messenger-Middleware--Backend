@@ -14,25 +14,15 @@ import (
 	"messenger-backend/pkg/messenger"
 
 	"github.com/google/uuid"
+	"github.com/panjf2000/ants/v2"
 	"gorm.io/datatypes"
 )
 
 // todo : mq :)
 type BroadcastConfig struct {
-	WorkerCount int
-	QueueSize   int
-	// JobTimeout bounds how long a single per-recipient job (one
-	// SendMessage/DeleteMessge + one repo call) is allowed to run.
-	// Zero disables the timeout. Without this, one slow/hanging
-	// client call can tie up a worker (and, in the worst case, the
-	// whole pool) for the lifetime of the parent context.
 	JobTimeout time.Duration
 }
 
-// service_contract.BroadcastTarget describes a single recipient a broadcast/delete
-// operation was attempted against. Structurally identical to (and
-// therefore assignable to) the anonymous struct type used by
-// service_contract.BroadcastResponse.Targets.
 type BroadcastTarget struct {
 	Name      string
 	Platform  string
@@ -45,9 +35,6 @@ type broadcastJob struct {
 	chat     entity.Chat
 }
 
-// jobResult is what a worker produces for a single job. Feeding these
-// through a channel to a single collector goroutine avoids the need
-// for a mutex around shared result/target slices.
 type jobResult struct {
 	result service_contract.BroadcastResult
 	target service_contract.BroadcastTarget
@@ -60,6 +47,7 @@ type broadcastService struct {
 	sentbalemsgService service_contract.SentBaleMsgService
 	log                logger.Logger
 	cfg                BroadcastConfig
+	pool               *ants.Pool
 }
 
 func NewBroadcastService(
@@ -69,17 +57,11 @@ func NewBroadcastService(
 	sentbalemsgService service_contract.SentBaleMsgService,
 	log logger.Logger,
 	cfg BroadcastConfig,
+	pool *ants.Pool,
 ) service_contract.BroadcastService {
 	registry := make(map[string]messenger.MessengerClient, len(clients))
 	for _, c := range clients {
 		registry[c.Platform()] = c
-	}
-
-	if cfg.WorkerCount <= 0 {
-		cfg.WorkerCount = 5
-	}
-	if cfg.QueueSize <= 0 {
-		cfg.QueueSize = 100
 	}
 
 	return &broadcastService{
@@ -89,11 +71,10 @@ func NewBroadcastService(
 		sentbalemsgService: sentbalemsgService,
 		log:                log.With(logger.String("component", "broadcast_service")),
 		cfg:                cfg,
+		pool:               pool,
 	}
 }
 
-// validatePlatforms checks that every requested platform has a
-// registered client, shared by both Broadcast and DeleteBroadcast.
 func (s *broadcastService) validatePlatforms(platforms []string) error {
 	for _, platform := range platforms {
 		if _, ok := s.clients[platform]; !ok {
@@ -106,64 +87,70 @@ func (s *broadcastService) validatePlatforms(platforms []string) error {
 	return nil
 }
 
-// runJobs contains the worker-pool plumbing shared by Broadcast and
-// DeleteBroadcast: it fans platformChats out into jobs, runs
-// s.cfg.WorkerCount workers that each call handle for every job, and
-// collects the results without any shared-slice mutex.
 func (s *broadcastService) runJobs(
 	ctx context.Context,
 	platformChats map[string][]entity.Chat,
 	handle func(ctx context.Context, job broadcastJob) jobResult,
 ) ([]service_contract.BroadcastResult, []service_contract.BroadcastTarget) {
-	jobQueue := make(chan broadcastJob, s.cfg.QueueSize)
-	resultQueue := make(chan jobResult, s.cfg.QueueSize)
+	var totalJobs int
+	for _, chats := range platformChats {
+		totalJobs += len(chats)
+	}
 
+	if totalJobs == 0 {
+		return nil, nil
+	}
+
+	resultChan := make(chan jobResult, totalJobs)
 	var wg sync.WaitGroup
-	for i := 0; i < s.cfg.WorkerCount; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for job := range jobQueue {
+
+Loop:
+	for platform, chats := range platformChats {
+		for _, chat := range chats {
+			select {
+			case <-ctx.Done():
+				break Loop
+			default:
+			}
+
+			j := broadcastJob{platform: platform, chat: chat}
+			wg.Add(1)
+
+			err := s.pool.Submit(func() {
+				defer wg.Done()
+
 				jobCtx := ctx
 				if s.cfg.JobTimeout > 0 {
 					var cancel context.CancelFunc
 					jobCtx, cancel = context.WithTimeout(ctx, s.cfg.JobTimeout)
-					resultQueue <- handle(jobCtx, job)
-					cancel()
-					continue
+					defer cancel()
 				}
-				resultQueue <- handle(jobCtx, job)
-			}
-		}()
-	}
 
-	// Producer: feed jobs, respecting cancellation.
-	go func() {
-		defer close(jobQueue)
-		for platform, chats := range platformChats {
-			for _, chat := range chats {
+				res := handle(jobCtx, j)
+
 				select {
 				case <-ctx.Done():
-					return
-				case jobQueue <- broadcastJob{platform: platform, chat: chat}:
+				case resultChan <- res:
 				}
+			})
+
+			if err != nil {
+				wg.Done()
+				s.log.Error(err, "failed to submit job to ants pool", logger.String("platform", platform))
 			}
 		}
-	}()
+	}
 
-	// Close resultQueue once every worker has finished, so the
-	// collector loop below terminates.
-	go func() {
-		wg.Wait()
-		close(resultQueue)
-	}()
+	wg.Wait()
+	close(resultChan)
 
 	var results []service_contract.BroadcastResult
 	var targets []service_contract.BroadcastTarget
-	for r := range resultQueue {
+	for r := range resultChan {
 		results = append(results, r.result)
 		targets = append(targets, r.target)
 	}
+
 	return results, targets
 }
 
@@ -190,10 +177,6 @@ func (s *broadcastService) Broadcast(ctx context.Context, companyID uint, req se
 		return nil, exception.Wrap(exception.ErrInternal, err)
 	}
 
-	// One UUID per broadcast call, shared by every recipient's
-	// history row. This is what lets DeleteBroadcast later find and
-	// unsend every message that belongs to this broadcast — each
-	// history row must NOT get its own random UUID.
 	broadcastUUID := uuid.New()
 
 	handle := func(ctx context.Context, job broadcastJob) jobResult {
@@ -207,7 +190,6 @@ func (s *broadcastService) Broadcast(ctx context.Context, companyID uint, req se
 				logger.String("target_id", job.chat.PlatformChatID),
 			)
 			return jobResult{
-
 				result: service_contract.BroadcastResult{
 					Platform: job.platform,
 					Success:  false,
@@ -239,17 +221,12 @@ func (s *broadcastService) Broadcast(ctx context.Context, companyID uint, req se
 			IsBroadcast:       true,
 			BroadcastUUID:     &broadcastUUID,
 		}); err != nil {
-			// The message was actually delivered on the platform;
-			// only persisting the history row failed. Surface it as
-			// a partial failure rather than a clean success, since
-			// this row won't be reachable by DeleteBroadcast later.
 			result.Success = false
 			result.Error = append(result.Error, err.Error())
 			s.log.Error(err, "broadcast history persist failed",
 				logger.String("platform", job.platform),
 				logger.String("target_id", job.chat.PlatformChatID),
 			)
-			// todo: mq to retry persisting history for delivered-but-unrecorded messages
 			s.log.Warn("message delivered but history not persisted; retry/reconciliation needed",
 				logger.String("platform", job.platform),
 				logger.String("target_id", job.chat.PlatformChatID),
@@ -303,7 +280,6 @@ func (s *broadcastService) DeleteBroadcast(ctx context.Context, companyID uint, 
 				},
 				target: target,
 			}
-
 		}
 
 		if err := client.DeleteMessage(ctx, job.chat.PlatformChatID, int(brmsg.PlatformMessageID)); err != nil {
@@ -332,16 +308,12 @@ func (s *broadcastService) DeleteBroadcast(ctx context.Context, companyID uint, 
 		}
 
 		if err := s.chatHisRepo.Delete(ctx, job.chat.ID, brmsg.ID); err != nil {
-			// The platform message was deleted; only the local
-			// history row failed to update. Surface as a partial
-			// failure so it can be reconciled later.
 			result.Success = false
 			result.Error = []string{err.Error()}
 			s.log.Error(err, "broadcast delete: history cleanup failed",
 				logger.String("platform", job.platform),
 				logger.String("target_id", job.chat.PlatformChatID),
 			)
-			// todo: mq to retry cleaning up history for delivered-delete-but-unrecorded rows
 			s.log.Warn("message deleted on platform but history row not cleaned up; retry/reconciliation needed",
 				logger.String("platform", job.platform),
 				logger.String("target_id", job.chat.PlatformChatID),
@@ -399,7 +371,6 @@ func (s *broadcastService) UpdateBroadcast(ctx context.Context, companyID uint, 
 				},
 				target: target,
 			}
-
 		}
 
 		if _, err := client.EditMessageText(ctx, job.chat.PlatformChatID, int(brmsg.PlatformMessageID), req.NewMessge.Content); err != nil {
@@ -432,16 +403,12 @@ func (s *broadcastService) UpdateBroadcast(ctx context.Context, companyID uint, 
 		////
 
 		if err := s.chatHisRepo.Upsert(ctx, brmsg); err != nil {
-			// The platform message was deleted; only the local
-			// history row failed to update. Surface as a partial
-			// failure so it can be reconciled later.
 			result.Success = false
 			result.Error = []string{err.Error()}
 			s.log.Error(err, "broadcast delete: history cleanup failed",
 				logger.String("platform", job.platform),
 				logger.String("target_id", job.chat.PlatformChatID),
 			)
-			// todo: mq to retry cleaning up history for delivered-delete-but-unrecorded rows
 			s.log.Warn("message deleted on platform but history row not cleaned up; retry/reconciliation needed",
 				logger.String("platform", job.platform),
 				logger.String("target_id", job.chat.PlatformChatID),

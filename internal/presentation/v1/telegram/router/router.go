@@ -32,6 +32,7 @@ func New(deps Dependencies, cfg *Config) (*telegram.Adapter, error) {
 	telegramOpts := []bot.Option{
 		bot.WithDebugHandler(bot.DebugHandler(deps.TelLogger)),
 		bot.WithDebug(),
+		bot.WithWorkers(1), // pool worker for handle updates
 	}
 
 	telegramAdapter, err := telegram.

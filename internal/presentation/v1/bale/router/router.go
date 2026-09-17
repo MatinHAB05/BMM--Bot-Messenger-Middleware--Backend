@@ -33,6 +33,7 @@ func New(deps Dependencies, cfg *Config) (*telegram.Adapter, error) {
 		bot.WithServerURL("https://tapi.bale.ai"),
 		bot.WithDebugHandler(bot.DebugHandler(deps.BaleLogger)),
 		bot.WithDebug(),
+		bot.WithWorkers(1), // pool worker for handle updates
 	}
 
 	baleAdapter, err := telegram.NewAdapter(cfg.Token, deps.BasicHandler.OnUpdate, deps.BasicHandler.OnMessage, baleOpts, setupRouting(deps, cfg))

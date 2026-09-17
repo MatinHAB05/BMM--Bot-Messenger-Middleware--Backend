@@ -36,5 +36,5 @@ clean-logs/bale/*.log
 SEND_EMAIL.txt
 SEND_PHONE_MESSAGE.txt
 matin_notes.txt
-
+matin/
 

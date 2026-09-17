@@ -10,8 +10,11 @@ import (
 	"messenger-backend/pkg/logger"
 	mail "messenger-backend/pkg/wneessen-go-mail"
 	"messenger-backend/static"
+
+	"github.com/panjf2000/ants/v2"
 )
 
+// todo use mq :
 const emailDebugFile = "./SEND_EMAIL.txt"
 
 type emailService struct {
@@ -20,14 +23,8 @@ type emailService struct {
 	realSend bool
 	statics  *static.StaticFiles
 	log      logger.Logger
+	pool     *ants.Pool
 }
-
-// todo use mq :
-// but for now
-const workers = 5
-const mqLen = 50
-
-var mq = make(chan service_contract.SendEmailRequest, mqLen)
 
 func NewEmailService(
 	sender mail.Sender,
@@ -35,44 +32,16 @@ func NewEmailService(
 	realSend bool,
 	statics *static.StaticFiles,
 	log logger.Logger,
+	pool *ants.Pool,
 ) service_contract.EmailService {
-	emsrv := &emailService{
+	return &emailService{
 		sender:   sender,
 		fileOut:  fileOut,
 		realSend: realSend,
 		statics:  statics,
 		log:      log.With(logger.String("component", "email_service")),
+		pool:     pool,
 	}
-
-	for i := 1; i <= workers; i++ {
-		worker_id := i
-		go func() {
-			for req := range mq {
-				if err := sender.Send(context.Background(), mail.SendOptions{
-					To:          req.To,
-					Subject:     req.Subject,
-					PlainBody:   req.TextBody,
-					HTMLBody:    req.HTMLBody,
-					EmbedFiles:  req.EmbedFiles,
-					Attachments: req.Attachments,
-				}); err != nil {
-					log.Error(err, "failed to send email via SMTP provider",
-						logger.Any("to", req.To),
-						logger.String("subject", req.Subject),
-						logger.Int("worker-id", worker_id),
-					)
-				} else {
-					log.Info("email sent successfully via SMTP provider",
-						logger.Any("to", req.To),
-						logger.String("subject", req.Subject),
-						logger.Int("worker-id", worker_id),
-					)
-				}
-			}
-		}()
-	}
-
-	return emsrv
 }
 
 func (s *emailService) SendEmail(ctx context.Context, req service_contract.SendEmailRequest) (*bool, error) {
@@ -88,12 +57,30 @@ func (s *emailService) SendEmail(ctx context.Context, req service_contract.SendE
 	}
 
 	if s.realSend {
-		select {
-		case mq <- req:
-			s.log.Info("real email request sent to mq channel", logger.Any("to", req.To))
-		default:
-			s.log.Error(nil, "email queue is full, dropping email", logger.Any("to", req.To))
-			return nil, fmt.Errorf("email queue capacity exceeded")
+		err := s.pool.Submit(func() {
+			if err := s.sender.Send(context.Background(), mail.SendOptions{
+				To:          req.To,
+				Subject:     req.Subject,
+				PlainBody:   req.TextBody,
+				HTMLBody:    req.HTMLBody,
+				EmbedFiles:  req.EmbedFiles,
+				Attachments: req.Attachments,
+			}); err != nil {
+				s.log.Error(err, "failed to send email via SMTP provider",
+					logger.Any("to", req.To),
+					logger.String("subject", req.Subject),
+				)
+			} else {
+				s.log.Info("email sent successfully via SMTP provider",
+					logger.Any("to", req.To),
+					logger.String("subject", req.Subject),
+				)
+			}
+		})
+
+		if err != nil {
+			s.log.Error(err, "email pool is full or closed, dropping email", logger.Any("to", req.To))
+			return nil, fmt.Errorf("email pool capacity exceeded: %w", err)
 		}
 	}
 

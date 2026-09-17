@@ -2,12 +2,17 @@ package service_contract
 
 import (
 	"context"
-	"messenger-backend/internal/domain/entity"
 	"time"
+
+	"messenger-backend/internal/domain/entity"
 )
 
+// ============================================================================
+// 1. DATA TRANSFER OBJECTS (DTOs)
+// ============================================================================
+
 // CreateAttachmentRequest is the input for creating a single Attachment.
-// The owning ChatHistory is always supplied separately (as a chatHistoryID
+// The owning ChatHistory is always supplied separately (a chatHistoryID
 // parameter, or implicitly via IngestMessageWithAttachmentsRequest) rather
 // than on this DTO, since the caller always already knows it.
 type CreateAttachmentRequest struct {
@@ -54,6 +59,22 @@ type AttachmentResponse struct {
 	CreatedAt               string `json:"created_at"`
 }
 
+// AttachmentListQuery carries GET /attachments' pagination and filter.
+type AttachmentListQuery struct {
+	Limit    int    `json:"limit"`
+	Offset   int    `json:"offset"`
+	Sort     string `json:"sort"`
+	FileType string `json:"file_type"`
+}
+
+// AttachmentListResponse is returned by ListAttachments.
+type AttachmentListResponse struct {
+	Attachments []AttachmentResponse `json:"attachments"`
+	Total       int64                `json:"total"`
+	Limit       int                  `json:"limit"`
+	Offset      int                  `json:"offset"`
+}
+
 // IngestMessageWithAttachmentsRequest is the input for
 // AttachmentService.IngestMessageWithAttachments: everything needed to
 // create one ChatHistory row plus its attachments atomically. RawPayload
@@ -72,31 +93,51 @@ type IngestMessageWithAttachmentsRequest struct {
 	Attachments       []CreateAttachmentRequest `json:"attachments,omitempty"`
 }
 
+// ============================================================================
+// 2. SERVICE INTERFACE
+// ============================================================================
+
 // AttachmentService is the sole entry point for Attachment business
 // logic. No entity.Attachment -- or any other GORM entity -- crosses this
 // boundary in either direction: every input is a primitive,
 // context.Context, or a Request DTO; every output is a primitive, error,
 // or Response DTO. Entity<->DTO mapping happens exclusively via the
 // To*/mapper functions in attachment_mapper.go, inside the implementation
-// (internal/application/service), never at the call site.
+// (internal/application/service), never at the call site -- including in
+// HTTP handlers, which must never import internal/domain/entity for
+// Attachment purposes.
 type AttachmentService interface {
 	CreateAttachment(ctx context.Context, chatHistoryID uint, req CreateAttachmentRequest) (*AttachmentResponse, error)
 	CreateAttachmentsBatch(ctx context.Context, chatHistoryID uint, reqs []CreateAttachmentRequest) ([]AttachmentResponse, error)
+
 	GetAttachmentByID(ctx context.Context, id uint) (*AttachmentResponse, error)
 	GetAttachmentsByMessageID(ctx context.Context, chatHistoryID uint) ([]AttachmentResponse, error)
+	GetAttachmentsByChatHistoryIDsBatch(ctx context.Context, chatHistoryIDs []uint) (map[uint][]AttachmentResponse, error)
+	GetAttachmentByPlatformFileID(ctx context.Context, platformFileID string) (*AttachmentResponse, error)
+	ListAttachments(ctx context.Context, query AttachmentListQuery) (*AttachmentListResponse, error)
+
 	UpdateAttachment(ctx context.Context, req UpdateAttachmentRequest) (*AttachmentResponse, error)
 	UpdateThumbnailID(ctx context.Context, attachmentID uint, thumbnailPlatformFileID string) error
+
 	DeleteAttachment(ctx context.Context, id uint) error
+	DeleteAttachmentsByIDs(ctx context.Context, ids []uint) error
 	DeleteAttachmentsByMessageID(ctx context.Context, chatHistoryID uint) error
+	RestoreAttachment(ctx context.Context, id uint) (*AttachmentResponse, error)
+
 	// ReplaceMessageAttachments atomically soft-deletes chatHistoryID's
 	// existing attachments and inserts reqs in their place (old rows are
 	// tombstoned, not erased -- see the implementation's doc comment).
 	ReplaceMessageAttachments(ctx context.Context, chatHistoryID uint, reqs []CreateAttachmentRequest) ([]AttachmentResponse, error)
+
 	// IngestMessageWithAttachments persists one ChatHistory row and its
 	// attachments as a single transaction via database.TrxManager --
 	// either both land, or neither does.
 	IngestMessageWithAttachments(ctx context.Context, req IngestMessageWithAttachmentsRequest) error
 }
+
+// ============================================================================
+// 3. MAPPERS
+// ============================================================================
 
 // The mapper functions below are plain, stateless functions with no
 // shared or mutable package-level state -- every input is read-only and
@@ -156,6 +197,17 @@ func ToAttachmentResponses(attachments []entity.Attachment) []AttachmentResponse
 		responses = append(responses, ToAttachmentResponse(a))
 	}
 	return responses
+}
+
+// ToAttachmentResponseMap maps a chatHistoryID->[]entity.Attachment map
+// (as returned by AttachmentRepository.GetByChatHistoryIDs) into its
+// response-DTO equivalent, for GetAttachmentsByChatHistoryIDsBatch.
+func ToAttachmentResponseMap(byChatHistoryID map[uint][]entity.Attachment) map[uint][]AttachmentResponse {
+	result := make(map[uint][]AttachmentResponse, len(byChatHistoryID))
+	for chatHistoryID, attachments := range byChatHistoryID {
+		result[chatHistoryID] = ToAttachmentResponses(attachments)
+	}
+	return result
 }
 
 // ToUpdateFields turns a partial update request into the {column: value}

@@ -9,6 +9,7 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-telegram/bot v1.25.0
 	github.com/google/uuid v1.6.0
+	github.com/panjf2000/ants/v2 v2.12.1
 	github.com/pressly/goose/v3 v3.28.0
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/rs/zerolog v1.35.1

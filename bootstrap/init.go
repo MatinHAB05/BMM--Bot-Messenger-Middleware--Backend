@@ -1,11 +1,3 @@
-// Package bootstrap is the application's composition root. Init wires
-// every dependency -- database, Redis, PASETO, Casbin, repositories,
-// services, handlers, the router, the seeder, and the Telegram/Bale
-// messenger engines -- into a single *App. StartListeners then launches
-// the background bot update listener goroutines described in spec
-// section D, entirely from this package.
-
-// todo : close conncetions
 package bootstrap
 
 import (
@@ -14,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/panjf2000/ants/v2"
 	"github.com/pressly/goose/v3"
 	goredis "github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -47,9 +40,6 @@ import (
 	"messenger-backend/static"
 )
 
-// App holds every long-lived dependency the process needs. Assembled once
-// by Init; used by cmd/app/main.go to serve HTTP, start listeners, and
-// shut everything down cleanly.
 type App struct {
 	Const  *Constants
 	Env    *Environment
@@ -60,12 +50,11 @@ type App struct {
 
 	telegramAdapter *telegram.Adapter
 	baleAdapter     *telegram.Adapter //***
+
+	emailPool     *ants.Pool
+	broadcastPool *ants.Pool
 }
 
-// Init loads configuration and constructs the full dependency graph. It
-// does not start the HTTP server or the background listeners -- see
-// cmd/app/main.go and StartListeners respectively -- so that callers (and
-// tests) can inspect/modify App before anything starts accepting traffic.
 func Init(ctx context.Context) (*App, error) {
 	env := LoadEnvironment()
 	cons := LoadNewConstants()
@@ -125,7 +114,18 @@ func Init(ctx context.Context) (*App, error) {
 		return nil, fmt.Errorf("init casbin enforcer: %w", err)
 	}
 
-	//Repo
+	// Pools
+	emailPool, err := ants.NewPool(5)
+	if err != nil {
+		return nil, fmt.Errorf("init email ants pool: %w", err)
+	}
+
+	broadcastPool, err := ants.NewPool(20)
+	if err != nil {
+		return nil, fmt.Errorf("init broadcast ants pool: %w", err)
+	}
+
+	// Repositories
 	tokenRepo := infrarepo.NewRedisTokenRepository(redisClient)
 	channelPendingRepo := infrarepo.NewChannelPendingRepository(redisClient)
 	chatHisRepo := infrarepo.NewChatHistoryRepository(db)
@@ -162,7 +162,8 @@ func Init(ctx context.Context) (*App, error) {
 		Password: env.Email.BMMEmailAppPassword,
 		SMTPHost: env.Email.SMTPHost,
 		SMTPPort: env.Email.SMTPPort,
-	}), env.Email.LogInFile, env.Email.RealSend, statics, log)
+	}), env.Email.LogInFile, env.Email.RealSend, statics, log, emailPool)
+
 	gen := otp.NewDefaultCodeGenerator()
 	otpService, _ := appservice.NewOTPService(otpRepo, emailDelivery, env.App.AppEnv, log,
 		otp.NewPhoneStrategy(env.OTP.OTPTokenTTL, 5, gen),
@@ -242,7 +243,7 @@ func Init(ctx context.Context) (*App, error) {
 	// Bale
 	basicBaleHandler := balehandlers.NewBasicHandler(chatService, chatHisService, sentbalemsgService, log, errlog)
 	directFeatChatCommandBaleHandler := balehandlers.NewDirectFeatChatCommandHandler(chatLinkService, errlog)
-	featChannelBaleHandler := balehandlers.NewFeatChannelHandler(chatLinkService, env.Bot.BaleBotUsername, errlog) // ✅ فیکس شد: BaleBotUsername
+	featChannelBaleHandler := balehandlers.NewFeatChannelHandler(chatLinkService, env.Bot.BaleBotUsername, errlog)
 
 	baleHandlers := balehandlers.BaleHandlers{
 		BasicHandler:                 basicBaleHandler,
@@ -262,16 +263,11 @@ func Init(ctx context.Context) (*App, error) {
 		BotUsername: env.Bot.BaleBotUsername,
 	}
 
-	// Each messenger engine is wired independently and only enabled when
-	// its token is configured, so the backend still boots cleanly with
-	// just one platform (or neither, for local development without bots).
 	var clients []messenger.MessengerClient
-
 	var telegramAdapter *telegram.Adapter
 
 	if env.Bot.TelegramBotToken != "" {
 		telegramAdapter, err = telegramrouter.New(telegramDeps, &telegramCfg)
-
 		if err != nil {
 			return nil, fmt.Errorf("init telegram adapter: %w", err)
 		}
@@ -284,7 +280,6 @@ func Init(ctx context.Context) (*App, error) {
 
 	if env.Bot.BaleBotToken != "" {
 		baleAdapter, err = balerouter.New(baleDeps, &baleCfg)
-
 		if err != nil {
 			return nil, fmt.Errorf("init bale adapter: %w", err)
 		}
@@ -294,10 +289,16 @@ func Init(ctx context.Context) (*App, error) {
 	}
 
 	// ... Services
-	broadcastService := appservice.NewBroadcastService(clients, chatRepo, chatHisRepo, sentbalemsgService, log, appservice.BroadcastConfig{
-		WorkerCount: 10,
-		QueueSize:   10,
-	})
+	broadcastService := appservice.NewBroadcastService(
+		clients,
+		chatRepo,
+		chatHisRepo,
+		sentbalemsgService,
+		log,
+		appservice.BroadcastConfig{JobTimeout: 0},
+		broadcastPool,
+	)
+
 	Services.BroadcastService = broadcastService
 
 	//Handlers
@@ -347,13 +348,14 @@ func Init(ctx context.Context) (*App, error) {
 			BroadcastPerMinute: env.RateLimit.BroadcastPerMinute,
 		}),
 
-		telegramAdapter: telegramAdapter, //for debug bale
-		baleAdapter:     baleAdapter,     // ✅ فیکس شد: دیگه nil نیست و کامنت مرده پاک شد
+		telegramAdapter: telegramAdapter,
+		baleAdapter:     baleAdapter,
+
+		emailPool:     emailPool,
+		broadcastPool: broadcastPool,
 	}, nil
 }
 
-// runMigrations applies every pending Goose migration under MigrationsDir
-// against the given GORM connection's underlying *sql.DB.
 func runMigrations(db *gorm.DB, migrationDirPath string, log logger.Logger) error {
 	sqlDB, err := db.DB()
 	if err != nil {
@@ -372,14 +374,6 @@ func runMigrations(db *gorm.DB, migrationDirPath string, log logger.Logger) erro
 	return nil
 }
 
-// StartListeners launches the Telegram and Bale background bot update
-// listeners (spec section D), one goroutine each, decoupled from one
-// another and from the HTTP server. Each listener is purely an I/O
-// ingress adapter -- the onUpdate closures built in Init do nothing but
-// call ChannelService.RecordActivity, so no business logic lives here or
-// in pkg/messenger. Listeners run until ctx is cancelled; an unexpected
-// exit (or panic) is logged and the listener is restarted after a short
-// backoff rather than taking the rest of the process down with it.
 func (a *App) StartListeners(ctx context.Context) {
 	if a.telegramAdapter != nil {
 		go func() {
@@ -393,11 +387,9 @@ func (a *App) StartListeners(ctx context.Context) {
 			a.runListenerWithRestart(ctx, "telegram", func(ctx context.Context) {
 				a.telegramAdapter.Listen(ctx)
 			})
-
 		}()
 	}
 	if a.baleAdapter != nil {
-		// return //TODO
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
@@ -409,7 +401,6 @@ func (a *App) StartListeners(ctx context.Context) {
 				a.baleAdapter.Listen(ctx)
 			})
 		}()
-
 	}
 }
 
@@ -445,11 +436,14 @@ func (a *App) runListenerWithRestart(ctx context.Context, name string, run func(
 	}
 }
 
-// Shutdown closes external connections (database, Redis). The HTTP
-// server itself is shut down separately by main.go via http.Server.Shutdown,
-// and listener goroutines stop on their own once ctx (passed to
-// StartListeners) is cancelled.
 func (a *App) Shutdown(ctx context.Context) {
+	if a.emailPool != nil {
+		a.emailPool.Release()
+	}
+	if a.broadcastPool != nil {
+		a.broadcastPool.Release()
+	}
+
 	if sqlDB, err := a.DB.DB(); err == nil {
 		if err := sqlDB.Close(); err != nil {
 			a.Logger.Warn("error closing database connection", logger.Err(err))
@@ -458,5 +452,4 @@ func (a *App) Shutdown(ctx context.Context) {
 	if err := a.Redis.Close(); err != nil {
 		a.Logger.Warn("error closing redis connection", logger.Err(err))
 	}
-
 }

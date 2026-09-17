@@ -23,16 +23,7 @@ const (
 // Attachment is a single media file -- or its thumbnail reference -- tied
 // to one ChatHistory message. Only platform-native file identifiers are
 // stored here (Telegram/Bale file_id strings); there is no byte storage,
-// S3/MinIO key, or local path anywhere on this entity or in the layers
-// built around it -- retrieval/download is a separate concern, out of
-// scope for this CRUD foundation.
-//
-// ThumbnailPlatformFileID is deliberately its own field rather than a
-// self-referential Attachment: Telegram/Bale both hand back a thumbnail
-// as a bare file_id alongside the main file, not as a fully-fledged
-// second message attachment, so modeling it as a plain string column
-// here avoids a spurious second row (and a nullable self-FK) for what is
-// really just metadata about the first one.
+// S3/MinIO key, or local path anywhere on this entity, by design.
 type Attachment struct {
 	ID                      uint               `gorm:"primaryKey" json:"id"`
 	ChatHistoryID           uint               `gorm:"column:chat_history_id;not null;index:idx_attachments_chat_history_id" json:"chat_history_id"`

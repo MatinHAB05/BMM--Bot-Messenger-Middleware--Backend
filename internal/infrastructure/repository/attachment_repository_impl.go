@@ -123,23 +123,27 @@ func (r *attachmentRepository) GetByChatHistoryIDs(ctx context.Context, chatHist
 	return result, nil
 }
 
-func (r *attachmentRepository) List(ctx context.Context, limit, offset int, sort string) ([]entity.Attachment, int64, error) {
+func (r *attachmentRepository) List(ctx context.Context, limit, offset int, sort, fileType string) ([]entity.Attachment, int64, error) {
 	db := database.ExtractTrxOrDB(ctx, r.db)
 	if sort == "" {
 		sort = "id DESC"
 	}
 
+	baseQuery := func() *gorm.DB {
+		q := db.GetGormDB().WithContext(ctx).Model(&entity.Attachment{})
+		if fileType != "" {
+			q = q.Where("file_type = ?", fileType)
+		}
+		return q
+	}
+
 	var total int64
-	if err := db.GetGormDB().WithContext(ctx).Model(&entity.Attachment{}).Count(&total).Error; err != nil {
+	if err := baseQuery().Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
 	var attachments []entity.Attachment
-	if err := db.GetGormDB().WithContext(ctx).
-		Order(sort).
-		Offset(offset).
-		Limit(limit).
-		Find(&attachments).Error; err != nil {
+	if err := baseQuery().Order(sort).Offset(offset).Limit(limit).Find(&attachments).Error; err != nil {
 		return nil, 0, err
 	}
 
@@ -196,18 +200,4 @@ func (r *attachmentRepository) RestoreByID(ctx context.Context, id uint) error {
 		Model(&entity.Attachment{}).
 		Where("id = ?", id).
 		Update("deleted_at", nil).Error
-}
-
-// --- Hard delete (permanent) ---
-
-func (r *attachmentRepository) HardDeleteByID(ctx context.Context, id uint) error {
-	db := database.ExtractTrxOrDB(ctx, r.db)
-
-	return db.GetGormDB().Unscoped().Delete(&entity.Attachment{}, "id = ?", id).Error
-}
-
-func (r *attachmentRepository) HardDeleteByChatHistoryID(ctx context.Context, chatHistoryID uint) error {
-	db := database.ExtractTrxOrDB(ctx, r.db)
-
-	return db.GetGormDB().Unscoped().Delete(&entity.Attachment{}, "chat_history_id = ?", chatHistoryID).Error
 }
