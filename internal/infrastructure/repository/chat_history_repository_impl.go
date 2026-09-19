@@ -23,8 +23,8 @@ func NewChatHistoryRepository(db database.Database) repository_contract.ChatHist
 }
 
 func (r *chatHistoryRepository) Create(ctx context.Context, message *entity.ChatHistory) error {
-	// db := database.ExtractTrxOrDB(ctx, r.db)
-	db := r.db
+	 db := database.ExtractTrxOrDB(ctx, r.db)
+	// db := r.db
 
 	if err := db.GetGormDB().WithContext(ctx).Create(message).Error; err != nil {
 		return fmt.Errorf("%w: %v", exception.ErrDatabaseOperation, err)
@@ -34,8 +34,8 @@ func (r *chatHistoryRepository) Create(ctx context.Context, message *entity.Chat
 }
 
 func (r *chatHistoryRepository) Upsert(ctx context.Context, message *entity.ChatHistory) error {
-	// db := database.ExtractTrxOrDB(ctx, r.db)
-	db := r.db
+	 db := database.ExtractTrxOrDB(ctx, r.db)
+	// db := r.db
 
 	if err := db.GetGormDB().WithContext(ctx).Save(message).Error; err != nil {
 		return fmt.Errorf("%w: %v", exception.ErrDatabaseOperation, err)
@@ -46,8 +46,8 @@ func (r *chatHistoryRepository) Upsert(ctx context.Context, message *entity.Chat
 
 func (r *chatHistoryRepository) FindByID(ctx context.Context, chatID, messageID uint) (*entity.ChatHistory, error) {
 	var message entity.ChatHistory
-	// db := database.ExtractTrxOrDB(ctx, r.db)
-	db := r.db
+	 db := database.ExtractTrxOrDB(ctx, r.db)
+	// db := r.db
 
 	err := db.GetGormDB().WithContext(ctx).Where("id = ? AND chat_id = ?", messageID, chatID).First(&message).Error
 	if err != nil {
@@ -62,8 +62,8 @@ func (r *chatHistoryRepository) FindByID(ctx context.Context, chatID, messageID 
 
 func (r *chatHistoryRepository) FindByPlatformMessgeID(ctx context.Context, chatID, platformMessageID uint) (*entity.ChatHistory, error) {
 	var message entity.ChatHistory
-	// db := database.ExtractTrxOrDB(ctx, r.db)
-	db := r.db
+	 db := database.ExtractTrxOrDB(ctx, r.db)
+	// db := r.db
 
 	err := db.GetGormDB().WithContext(ctx).Where("platform_message_id = ? AND chat_id = ?", platformMessageID, chatID).First(&message).Error
 	if err != nil {
@@ -77,8 +77,8 @@ func (r *chatHistoryRepository) FindByPlatformMessgeID(ctx context.Context, chat
 }
 
 func (r *chatHistoryRepository) List(ctx context.Context, chatID uint, filter repository_contract.ChatHistoryFilter, offset, limit int) ([]entity.ChatHistory, *int64, error) {
-	// db := database.ExtractTrxOrDB(ctx, r.db)
-	db := r.db
+	 db := database.ExtractTrxOrDB(ctx, r.db)
+	// db := r.db
 
 	baseQuery := func() *gorm.DB {
 		q := db.GetGormDB().WithContext(ctx).Model(&entity.ChatHistory{}).Where("chat_id = ?", chatID)
@@ -111,8 +111,8 @@ func (r *chatHistoryRepository) List(ctx context.Context, chatID uint, filter re
 }
 
 func (r *chatHistoryRepository) Delete(ctx context.Context, chatID, messageID uint) error {
-	// db := database.ExtractTrxOrDB(ctx, r.db)
-	db := r.db
+	 db := database.ExtractTrxOrDB(ctx, r.db)
+	// db := r.db
 
 	res := db.GetGormDB().WithContext(ctx).Where("chat_id = ?", chatID).Delete(&entity.ChatHistory{}, "id = ?", messageID)
 	if res.Error != nil {
@@ -127,8 +127,8 @@ func (r *chatHistoryRepository) Delete(ctx context.Context, chatID, messageID ui
 
 func (r *chatHistoryRepository) GetByBroadcastMsgID(ctx context.Context, broadcastMsgUUID uuid.UUID, chatID uint) (*entity.ChatHistory, error) {
 	var message entity.ChatHistory
-	// db := database.ExtractTrxOrDB(ctx, r.db)
-	db := r.db
+	 db := database.ExtractTrxOrDB(ctx, r.db)
+	// db := r.db
 
 	err := db.GetGormDB().WithContext(ctx).Where("broadcast_uuid = ? AND chat_id = ?", broadcastMsgUUID, chatID).First(&message).Error
 	if err != nil {

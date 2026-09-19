@@ -16,6 +16,17 @@ import (
 	"github.com/go-telegram/bot/models"
 )
 
+// Update and Message re-export the go-telegram/bot SDK's raw update and
+// message types under this package. Nothing outside package telegram
+// should need to import github.com/go-telegram/bot/models directly --
+// callers (package telegramhandlers, etc.) use telegram.Update /
+// telegram.Message instead, and all Telegram-SDK-shaped logic
+// (extraction, field mapping) stays behind this adapter.
+type (
+	Update  = models.Update
+	Message = models.Message
+)
+
 type ChatUpdate struct {
 	TargetID    string
 	Title       string
@@ -47,7 +58,7 @@ type MessageUpdate struct {
 }
 
 type UpdateHandler func(ctx context.Context, update ChatUpdate)
-type MessageHandler func(ctx context.Context, msg MessageUpdate)
+type MessageHandler func(ctx context.Context, msg *Update)
 type TelegramHandler func(ctx context.Context, bot *tgbot.Bot, update *models.Update)
 
 // RouterFunc allows external packages to attach custom handlers, middlewares, or routes to the bot.
@@ -215,9 +226,7 @@ func (a *Adapter) handler(onUpdate UpdateHandler, onMessage MessageHandler) func
 
 			if onMessage != nil {
 				log.Println("im a onMessage")
-				if msg, ok := ExtractMessage(update); ok {
-					onMessage(ctx, msg)
-				}
+				onMessage(ctx, update)
 			}
 			next(ctx, b, update)
 		}
@@ -318,6 +327,34 @@ func ExtractMessage(update *models.Update) (MessageUpdate, bool) {
 	}, true
 }
 
+// ExtractRawMessage returns the message-bearing field off whichever
+// update type arrived (a normal message, an edit, or a channel post all
+// carry the same shape) -- the raw SDK message itself, rather than the
+// adapter-agnostic MessageUpdate that ExtractMessage returns. Callers
+// that need fields MessageUpdate doesn't carry (e.g. attachment
+// extraction, which needs Photo/Video/Document/Audio/Voice/Animation)
+// use this instead.
+//
+// Moved here from package telegramhandlers, where it lived as an
+// unexported extractTelegramMessage -- unchanged logic, just relocated
+// next to the rest of the update-extraction helpers it belongs with.
+// Note it does not check EditedChannelPost, unlike ExtractChat/
+// ExtractMessage above -- that's how it was written in
+// telegramhandlers too, preserved as-is rather than "fixed" as part of
+// this move.
+func ExtractRawMessage(update *Update) *Message {
+	switch {
+	case update.Message != nil:
+		return update.Message
+	case update.EditedMessage != nil:
+		return update.EditedMessage
+	case update.ChannelPost != nil:
+		return update.ChannelPost
+	default:
+		return nil
+	}
+}
+
 // MessageSender resolves a sender identity from a message.
 func MessageSender(msg *models.Message) (id string, name string) {
 	switch {
@@ -341,6 +378,35 @@ func UserDisplayName(u models.User) string {
 		name = u.Username
 	}
 	return name
+}
+
+// SenderID returns from's Telegram user ID as a string, or "" if from is
+// nil.
+//
+// Moved here from package telegramhandlers (was an unexported
+// senderID(from *models.User)) -- same behavior, just relocated so
+// telegramhandlers doesn't need to touch models.User directly.
+func SenderID(from *models.User) string {
+	if from == nil {
+		return ""
+	}
+	return strconv.FormatInt(from.ID, 10)
+}
+
+// SenderDisplayName returns from's display name, or "" if from is nil.
+//
+// Moved here from package telegramhandlers (was an unexported
+// senderName(from *models.User)), whose body was already byte-for-byte
+// identical to UserDisplayName's fallback chain (FirstName + LastName,
+// falling back to Username) modulo the nil check -- so rather than
+// duplicate that logic in its new home too, this just adds the nil
+// check and delegates to UserDisplayName. Output is unchanged for every
+// input.
+func SenderDisplayName(from *models.User) string {
+	if from == nil {
+		return ""
+	}
+	return UserDisplayName(*from)
 }
 
 // MessageContent picks Text or Caption from a message.

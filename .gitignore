@@ -37,4 +37,4 @@ SEND_EMAIL.txt
 SEND_PHONE_MESSAGE.txt
 matin_notes.txt
 matin/
-
+*.asar

@@ -2,19 +2,27 @@ package service_contract
 
 import (
 	"context"
+	"mime/multipart"
 	"time"
 
 	"messenger-backend/internal/domain/entity"
 )
 
-// ============================================================================
-// 1. DATA TRANSFER OBJECTS (DTOs)
-// ============================================================================
+// ==========================================
+// 1. DTOs
+// ==========================================
 
 // CreateAttachmentRequest is the input for creating a single Attachment.
 // The owning ChatHistory is always supplied separately (a chatHistoryID
 // parameter, or implicitly via IngestMessageWithAttachmentsRequest) rather
 // than on this DTO, since the caller always already knows it.
+//
+// StoragePath/ThumbnailStoragePath are optional: set them when the
+// caller has ALREADY uploaded the bytes to object storage before calling
+// (the Telegram ingestion flow does this -- fetch from Telegram, upload
+// to MinIO, then build this request with the resulting object key).
+// Leave both blank for a request that only records metadata with no
+// backing object yet.
 type CreateAttachmentRequest struct {
 	PlatformFileID          string `json:"platform_file_id"`
 	FileType                string `json:"file_type"`
@@ -22,6 +30,8 @@ type CreateAttachmentRequest struct {
 	MimeType                string `json:"mime_type,omitempty"`
 	FileSize                int64  `json:"file_size,omitempty"`
 	ThumbnailPlatformFileID string `json:"thumbnail_platform_file_id,omitempty"`
+	StoragePath             string `json:"storage_path,omitempty"`
+	ThumbnailStoragePath    string `json:"thumbnail_storage_path,omitempty"`
 	Width                   int    `json:"width,omitempty"`
 	Height                  int    `json:"height,omitempty"`
 	Duration                int    `json:"duration,omitempty"`
@@ -43,7 +53,11 @@ type UpdateAttachmentRequest struct {
 
 // AttachmentResponse is the ONLY shape AttachmentService ever returns for
 // an attachment -- no entity.Attachment crosses the service boundary in
-// either direction.
+// either direction. StoragePath/ThumbnailStoragePath are the raw MinIO
+// object keys (NOT downloadable URLs -- use GetAttachmentDownloadURL /
+// GetAttachmentsDownloadURLsBatch for those); they're included here
+// mainly so a caller can tell whether the upload has completed yet
+// (empty means "not uploaded" -- see entity.Attachment's doc comment).
 type AttachmentResponse struct {
 	ID                      uint   `json:"id"`
 	ChatHistoryID           uint   `json:"chat_history_id"`
@@ -53,6 +67,8 @@ type AttachmentResponse struct {
 	MimeType                string `json:"mime_type,omitempty"`
 	FileSize                int64  `json:"file_size,omitempty"`
 	ThumbnailPlatformFileID string `json:"thumbnail_platform_file_id,omitempty"`
+	StoragePath             string `json:"storage_path,omitempty"`
+	ThumbnailStoragePath    string `json:"thumbnail_storage_path,omitempty"`
 	Width                   int    `json:"width,omitempty"`
 	Height                  int    `json:"height,omitempty"`
 	Duration                int    `json:"duration,omitempty"`
@@ -93,9 +109,9 @@ type IngestMessageWithAttachmentsRequest struct {
 	Attachments       []CreateAttachmentRequest `json:"attachments,omitempty"`
 }
 
-// ============================================================================
-// 2. SERVICE INTERFACE
-// ============================================================================
+// ==========================================
+// 2. Interface
+// ==========================================
 
 // AttachmentService is the sole entry point for Attachment business
 // logic. No entity.Attachment -- or any other GORM entity -- crosses this
@@ -106,15 +122,33 @@ type IngestMessageWithAttachmentsRequest struct {
 // (internal/application/service), never at the call site -- including in
 // HTTP handlers, which must never import internal/domain/entity for
 // Attachment purposes.
+//
+// Object-storage-backed methods (GetAttachmentDownloadURL and below) are
+// implemented against repository_contract.StorageRepository, never
+// against minio-go directly -- see that interface's doc comment for the
+// "zero SDK leakage" rule this enforces.
 type AttachmentService interface {
 	CreateAttachment(ctx context.Context, chatHistoryID uint, req CreateAttachmentRequest) (*AttachmentResponse, error)
 	CreateAttachmentsBatch(ctx context.Context, chatHistoryID uint, reqs []CreateAttachmentRequest) ([]AttachmentResponse, error)
+	// UploadDirectAttachment handles a direct client file upload (e.g. a
+	// multipart/form-data POST): it streams fileHeader's content straight
+	// into object storage, then creates the DB record with the resulting
+	// StoragePath already populated.
+	UploadDirectAttachment(ctx context.Context, chatHistoryID uint, fileHeader *multipart.FileHeader) (*AttachmentResponse, error)
 
 	GetAttachmentByID(ctx context.Context, id uint) (*AttachmentResponse, error)
 	GetAttachmentsByMessageID(ctx context.Context, chatHistoryID uint) ([]AttachmentResponse, error)
 	GetAttachmentsByChatHistoryIDsBatch(ctx context.Context, chatHistoryIDs []uint) (map[uint][]AttachmentResponse, error)
 	GetAttachmentByPlatformFileID(ctx context.Context, platformFileID string) (*AttachmentResponse, error)
 	ListAttachments(ctx context.Context, query AttachmentListQuery) (*AttachmentListResponse, error)
+	// GetAttachmentDownloadURL returns a time-limited presigned MinIO URL
+	// for the attachment's stored object. Errors if the attachment has no
+	// StoragePath yet (upload not completed/attempted).
+	GetAttachmentDownloadURL(ctx context.Context, attachmentID uint) (string, error)
+	// GetAttachmentsDownloadURLsBatch is the batch form of the above;
+	// attachments with no StoragePath are silently omitted from the
+	// result map rather than failing the whole batch.
+	GetAttachmentsDownloadURLsBatch(ctx context.Context, attachmentIDs []uint) (map[uint]string, error)
 
 	UpdateAttachment(ctx context.Context, req UpdateAttachmentRequest) (*AttachmentResponse, error)
 	UpdateThumbnailID(ctx context.Context, attachmentID uint, thumbnailPlatformFileID string) error
@@ -122,22 +156,32 @@ type AttachmentService interface {
 	DeleteAttachment(ctx context.Context, id uint) error
 	DeleteAttachmentsByIDs(ctx context.Context, ids []uint) error
 	DeleteAttachmentsByMessageID(ctx context.Context, chatHistoryID uint) error
+	// DeleteAttachmentWithStorage soft-deletes the DB record AND removes
+	// its object(s) from storage (best-effort: a storage-delete failure
+	// is logged, not returned, since the DB row -- the source of truth
+	// for "does this exist" -- is already gone by that point).
+	DeleteAttachmentWithStorage(ctx context.Context, attachmentID uint) error
+	// DeleteAttachmentsWithStorageBatch is the batch form of the above,
+	// using StorageRepository.DeleteFilesBatch for the object removal.
+	DeleteAttachmentsWithStorageBatch(ctx context.Context, attachmentIDs []uint) error
 	RestoreAttachment(ctx context.Context, id uint) (*AttachmentResponse, error)
 
 	// ReplaceMessageAttachments atomically soft-deletes chatHistoryID's
 	// existing attachments and inserts reqs in their place (old rows are
 	// tombstoned, not erased -- see the implementation's doc comment).
 	ReplaceMessageAttachments(ctx context.Context, chatHistoryID uint, reqs []CreateAttachmentRequest) ([]AttachmentResponse, error)
-
 	// IngestMessageWithAttachments persists one ChatHistory row and its
 	// attachments as a single transaction via database.TrxManager --
-	// either both land, or neither does.
+	// either both land, or neither does. Callers that already uploaded
+	// media to storage (e.g. the Telegram ingestion flow) set
+	// StoragePath/ThumbnailStoragePath on each CreateAttachmentRequest
+	// before calling this.
 	IngestMessageWithAttachments(ctx context.Context, req IngestMessageWithAttachmentsRequest) error
 }
 
-// ============================================================================
-// 3. MAPPERS
-// ============================================================================
+// ==========================================
+// 3. Mappers
+// ==========================================
 
 // The mapper functions below are plain, stateless functions with no
 // shared or mutable package-level state -- every input is read-only and
@@ -156,6 +200,8 @@ func ToAttachmentEntity(chatHistoryID uint, req CreateAttachmentRequest) entity.
 		MimeType:                req.MimeType,
 		FileSize:                req.FileSize,
 		ThumbnailPlatformFileID: req.ThumbnailPlatformFileID,
+		StoragePath:             req.StoragePath,
+		ThumbnailStoragePath:    req.ThumbnailStoragePath,
 		Width:                   req.Width,
 		Height:                  req.Height,
 		Duration:                req.Duration,
@@ -183,6 +229,8 @@ func ToAttachmentResponse(attachment entity.Attachment) AttachmentResponse {
 		MimeType:                attachment.MimeType,
 		FileSize:                attachment.FileSize,
 		ThumbnailPlatformFileID: attachment.ThumbnailPlatformFileID,
+		StoragePath:             attachment.StoragePath,
+		ThumbnailStoragePath:    attachment.ThumbnailStoragePath,
 		Width:                   attachment.Width,
 		Height:                  attachment.Height,
 		Duration:                attachment.Duration,

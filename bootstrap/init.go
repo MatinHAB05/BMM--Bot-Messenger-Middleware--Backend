@@ -22,6 +22,7 @@ import (
 	redisinfra "messenger-backend/internal/infrastructure/redis"
 	infrarepo "messenger-backend/internal/infrastructure/repository"
 	"messenger-backend/internal/infrastructure/seed"
+	"messenger-backend/internal/infrastructure/storage"
 	apimiddleware "messenger-backend/internal/presentation/middleware/api"
 	balemiddleware "messenger-backend/internal/presentation/middleware/bale"
 	telegrammiddleware "messenger-backend/internal/presentation/middleware/telegram"
@@ -126,6 +127,19 @@ func Init(ctx context.Context) (*App, error) {
 	}
 
 	// Repositories
+	s3Repo, err := storage.NewMinIORepository(storage.Config{ ///////////////////////////////////////
+		Endpoint:        "",
+		AccessKeyID:     "",
+		SecretAccessKey: "",
+		UseSSL:          false,
+		Region:          "",
+		Bucket:          "",
+		MaxConcurrency:  5,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("init s3: %w", err)
+	}
+	attachRepo := infrarepo.NewAttachmentRepository(db)
 	tokenRepo := infrarepo.NewRedisTokenRepository(redisClient)
 	channelPendingRepo := infrarepo.NewChannelPendingRepository(redisClient)
 	chatHisRepo := infrarepo.NewChatHistoryRepository(db)
@@ -172,6 +186,7 @@ func Init(ctx context.Context) (*App, error) {
 		otp.NewLinkChannelChatCompanyStrategy(env.OTP.OTPTokenTTL, 5, gen),
 		otp.NewRegisterUserStrategy(env.OTP.OTPTokenTTL, 5, gen),
 	)
+	attachService := appservice.NewAttachmentService(attachRepo, chatHisRepo, s3Repo, trxManger, log, "!!!!!!!!!!", time.Hour) ///////////////////////////////////////////////////////////
 	authService := appservice.NewAuthService(userRepo, companyRepo, rbacRepo, tokenRepo, otpService, trxManger, tokenMaker, log, &appservice.AuthServiceConfig{
 		AccessTokenTTL:  env.Auth.AccessTokenTTL,
 		RefreshTokenTTL: env.Auth.RefreshTokenTTL,
@@ -218,7 +233,7 @@ func Init(ctx context.Context) (*App, error) {
 
 	// platforms handlers
 	// Telegram:
-	basicTelegramHandler := telegramhandlers.NewBasicHandler(chatService, chatHisService, log, errlog)
+	basicTelegramHandler := telegramhandlers.NewBasicHandler(chatService, chatHisService, attachService, s3Repo, nil, "!!!!", log, errlog) ////////////////////////////////////////////////////////
 	directFeatChatCommandTelegramHandler := telegramhandlers.NewDirectFeatChatCommandHandler(chatLinkService, errlog)
 	featChannelTelegramHandler := telegramhandlers.NewFeatChannelHandler(chatLinkService, env.Bot.TelegramBotUsername, errlog)
 
@@ -241,7 +256,7 @@ func Init(ctx context.Context) (*App, error) {
 	}
 
 	// Bale
-	basicBaleHandler := balehandlers.NewBasicHandler(chatService, chatHisService, sentbalemsgService, log, errlog)
+	basicBaleHandler := balehandlers.NewBasicHandler(chatService, chatHisService, sentbalemsgService, s3Repo, nil, "!!!!", log, errlog)
 	directFeatChatCommandBaleHandler := balehandlers.NewDirectFeatChatCommandHandler(chatLinkService, errlog)
 	featChannelBaleHandler := balehandlers.NewFeatChannelHandler(chatLinkService, env.Bot.BaleBotUsername, errlog)
 

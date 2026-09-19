@@ -51,6 +51,7 @@ func NewPasetoMaker(hexKey string) (Maker, error) {
 
 func (m *PasetoMaker) CreateToken(userID, companyID, username string, tokenType TokenType, duration time.Duration) (string, *Payload, error) {
 	now := time.Now()
+	// ? we can use v7 (after enabale pool random) but we are fine for now (espically for token payloads!)
 	payload := &Payload{
 		ID:        uuid.New(),
 		UserID:    userID,

@@ -3,6 +3,7 @@ package service_contract
 import "time"
 
 type Services struct {
+	AttachmentService
 	AuthService
 	BroadcastService
 	ChannelPendingService

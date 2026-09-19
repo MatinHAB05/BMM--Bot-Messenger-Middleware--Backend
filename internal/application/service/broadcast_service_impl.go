@@ -177,6 +177,7 @@ func (s *broadcastService) Broadcast(ctx context.Context, companyID uint, req se
 		return nil, exception.Wrap(exception.ErrInternal, err)
 	}
 
+	// ? we can use v7 (after enabale pool random) but we are fine for now
 	broadcastUUID := uuid.New()
 
 	handle := func(ctx context.Context, job broadcastJob) jobResult {

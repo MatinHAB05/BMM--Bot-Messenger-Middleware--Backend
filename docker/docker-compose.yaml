@@ -18,6 +18,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - messenger-backend
 
   redis:
     image: redis:7-alpine
@@ -32,7 +34,60 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - messenger-backend
+
+  # rustfs:
+  #   image: rustfs/rustfs:latest
+  #   container_name: rustfs-local
+  #   restart: unless-stopped
+  #   ports:
+  #     - "9000:9000" # API
+  #     - "9001:9001" # WebUI
+  #   environment:
+  #     - RUSTFS_ACCESS_KEY=adminadminadmin
+  #     - RUSTFS_SECRET_KEY=adminadminadmin
+  #     - RUSTFS_ADDRESS=0.0.0.0:9000
+  #     - RUSTFS_CONSOLE_ADDRESS=0.0.0.0:9001
+  #     - RUSTFS_CONSOLE_ENABLE=true
+  #   volumes:
+  #     - rustfs_data:/data
+
+  # rustfs-cli:
+  #   image: rustfs/rc:latest
+  #   container_name: rustfs-cli
+  #   entrypoint: ["sleep", "infinity"]
+  #   depends_on:
+  # - rustfs
+
+  # todo : for just now(later replace it with rustfs)
+  minio:
+    image: minio/minio:latest
+    container_name: messenger-backend-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001" #
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - messenger-backend
 
 volumes:
   postgres_data:
   redis_data:
+  # rustfs_data:
+  minio_data:
+
+networks:
+  messenger-backend:
+    driver: bridge
