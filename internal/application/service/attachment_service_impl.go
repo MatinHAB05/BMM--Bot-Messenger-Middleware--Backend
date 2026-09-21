@@ -279,6 +279,81 @@ func (s *attachmentService) GetAttachmentsDownloadURLsBatch(ctx context.Context,
 	return result, nil
 }
 
+// GetAttachmentDownloadURLByMessageID fetches attachment metadata for a single message and
+// returns a map of attachment ID to its presigned MinIO URL.
+func (s *attachmentService) GetAttachmentDownloadURLByMessageID(ctx context.Context, messageID uint) (map[uint]string, error) {
+	urlsByMsg, err := s.GetAttachmentsDownloadURLsBatchByMessageIDs(ctx, []uint{messageID})
+	if err != nil {
+		return nil, err
+	}
+
+	res, ok := urlsByMsg[messageID]
+	if !ok || len(res) == 0 {
+		return nil, exception.ErrAttachmentNotFound
+	}
+
+	return res, nil
+}
+
+// GetAttachmentsDownloadURLsBatchByMessageIDs fetches attachment metadata for multiple messages
+// in batch and returns a nested map: map[messageID]map[attachmentID]presignedURL.
+func (s *attachmentService) GetAttachmentsDownloadURLsBatchByMessageIDs(ctx context.Context, messageIDs []uint) (map[uint]map[uint]string, error) {
+	if len(messageIDs) == 0 {
+		return make(map[uint]map[uint]string), nil
+	}
+
+	attachmentsByMessageID, err := s.attachmentRepo.GetByChatHistoryIDs(ctx, messageIDs)
+	if err != nil {
+		return nil, exception.Wrap(exception.ErrInternal, err)
+	}
+
+	type attInfo struct {
+		messageID    uint
+		attachmentID uint
+	}
+
+	totalEstimate := len(attachmentsByMessageID)
+	pathToInfo := make(map[string]attInfo, totalEstimate)
+	keys := make([]string, 0, totalEstimate)
+
+	for msgID, atts := range attachmentsByMessageID {
+		for _, att := range atts {
+			if att.StoragePath == "" {
+				continue
+			}
+			pathToInfo[att.StoragePath] = attInfo{
+				messageID:    msgID,
+				attachmentID: att.ID,
+			}
+			keys = append(keys, att.StoragePath)
+		}
+	}
+
+	if len(keys) == 0 {
+		return make(map[uint]map[uint]string), nil
+	}
+
+	urlsByKey, err := s.storageRepo.GetPresignedURLsBatch(ctx, s.bucketName, keys, s.presignExpiry)
+	if err != nil && len(urlsByKey) == 0 {
+		return nil, exception.Wrap(exception.ErrInternal, err)
+	}
+
+	result := make(map[uint]map[uint]string, len(attachmentsByMessageID))
+	for key, presignedURL := range urlsByKey {
+		info, exists := pathToInfo[key]
+		if !exists {
+			continue
+		}
+
+		if result[info.messageID] == nil {
+			result[info.messageID] = make(map[uint]string)
+		}
+		result[info.messageID][info.attachmentID] = presignedURL
+	}
+
+	return result, nil
+}
+
 // --- Update ---
 
 func (s *attachmentService) UpdateAttachment(ctx context.Context, req service_contract.UpdateAttachmentRequest) (*service_contract.AttachmentResponse, error) {

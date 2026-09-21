@@ -114,40 +114,40 @@ func (h *AttachmentHandler) GetAttachmentsByMessageID(c *gin.Context) {
 	success(c, http.StatusOK, resp)
 }
 
-// func (h *AttachmentHandler) GetDownloadLinksAttachmentsByMessageID(c *gin.Context) {
-// 	chatHistoryID, err := parseUintParam(c, "message_id")
-// 	if err != nil {
-// 		fail(c, err)
-// 		return
-// 	}
-
-// 	resp, err := h.attachmentService.GetAttachmentDownloadURL(c.Request.Context(), chatHistoryID)
-// 	if err != nil {
-// 		fail(c, err)
-// 		return
-// 	}
-
-// 	success(c, http.StatusOK, resp)
-// }
-
-// func (h *AttachmentHandler) BatchGetDownloadLinksAttachmentsByMessageID(c *gin.Context) {
-// 	var req getByChatHistoryIDsBatchRequest
-// 	if err := c.ShouldBindJSON(&req); err != nil {
-// 		fail(c, exception.Wrap(exception.ErrBadRequest, err))
-// 		return
-// 	}
-
-// 	resp, err := h.attachmentService.GetAttachmentsDownloadURLsBatch(c.Request.Context(), req.ChatHistoryIDs)
-// 	if err != nil {
-// 		fail(c, err)
-// 		return
-// 	}
-
-// 	success(c, http.StatusOK, resp)
-
-// }
-
 func (h *AttachmentHandler) GetDownloadLinksAttachmentsByMessageID(c *gin.Context) {
+	chatHistoryID, err := parseUintParam(c, "message_id")
+	if err != nil {
+		fail(c, err)
+		return
+	}
+
+	resp, err := h.attachmentService.GetAttachmentDownloadURLByMessageID(c.Request.Context(), chatHistoryID)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+
+	success(c, http.StatusOK, resp)
+}
+
+func (h *AttachmentHandler) BatchGetDownloadLinksAttachmentsByMessageID(c *gin.Context) {
+	var req getByChatHistoryIDsBatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, exception.Wrap(exception.ErrBadRequest, err))
+		return
+	}
+
+	resp, err := h.attachmentService.GetAttachmentsDownloadURLsBatchByMessageIDs(c.Request.Context(), req.ChatHistoryIDs)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+
+	success(c, http.StatusOK, resp)
+
+}
+
+func (h *AttachmentHandler) GetDownloadLinksAttachmentsByAttachmentID(c *gin.Context) {
 	attachID, err := parseUintParam(c, "id")
 	if err != nil {
 		fail(c, err)
@@ -163,7 +163,7 @@ func (h *AttachmentHandler) GetDownloadLinksAttachmentsByMessageID(c *gin.Contex
 	success(c, http.StatusOK, resp)
 }
 
-func (h *AttachmentHandler) BatchGetDownloadLinksAttachmentsByMessageID(c *gin.Context) {
+func (h *AttachmentHandler) BatchGetDownloadLinksAttachmentsByAttachmentID(c *gin.Context) {
 	var req getByAttachIDsBatchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, exception.Wrap(exception.ErrBadRequest, err))

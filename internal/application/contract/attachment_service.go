@@ -154,10 +154,13 @@ type AttachmentService interface {
 	// for the attachment's stored object. Errors if the attachment has no
 	// StoragePath yet (upload not completed/attempted).
 	GetAttachmentDownloadURL(ctx context.Context, attachmentID uint) (string, error)
+	GetAttachmentDownloadURLByMessageID(ctx context.Context, messageID uint) (map[uint]string, error)
+
 	// GetAttachmentsDownloadURLsBatch is the batch form of the above;
 	// attachments with no StoragePath are silently omitted from the
 	// result map rather than failing the whole batch.
 	GetAttachmentsDownloadURLsBatch(ctx context.Context, attachmentIDs []uint) (map[uint]string, error)
+	GetAttachmentsDownloadURLsBatchByMessageIDs(ctx context.Context, messageIDs []uint) (map[uint]map[uint]string, error)
 
 	UpdateAttachment(ctx context.Context, req UpdateAttachmentRequest) (*AttachmentResponse, error)
 	UpdateThumbnailID(ctx context.Context, attachmentID uint, thumbnailPlatformFileID string) error
