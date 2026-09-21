@@ -28,6 +28,7 @@ import (
 	telegrammiddleware "messenger-backend/internal/presentation/middleware/telegram"
 	apihandler "messenger-backend/internal/presentation/v1/api/handler"
 	apirouter "messenger-backend/internal/presentation/v1/api/router"
+	balehandlers "messenger-backend/internal/presentation/v1/bale/handler"
 	balerouter "messenger-backend/internal/presentation/v1/bale/router"
 	telegramhandlers "messenger-backend/internal/presentation/v1/telegram/handler"
 	telegramrouter "messenger-backend/internal/presentation/v1/telegram/router"
@@ -80,8 +81,8 @@ func Init(ctx context.Context) (*App, error) {
 	}
 
 	telLogger, _ := tellogger.NewLogger(false, "telegram")
-	//todo
-	// baleLogger, _ := tellogger.NewLogger(false, "bale")
+
+	baleLogger, _ := tellogger.NewLogger(false, "bale")
 
 	if err := validatePasetoKey(env); err != nil {
 		return nil, err
@@ -262,27 +263,27 @@ func Init(ctx context.Context) (*App, error) {
 	// same command handlers, same dependency shape, just its own bot token
 	// and its own logger/adapter instance.
 	//todo
-	// basicBaleHandler := balehandlers.NewBasicHandler(chatService, chatHisService, sentbalemsgService, log, errlog)
-	// directFeatChatCommandBaleHandler := balehandlers.NewDirectFeatChatCommandHandler(chatLinkService, errlog)
-	// featChannelBaleHandler := balehandlers.NewFeatChannelHandler(chatLinkService, env.Bot.BaleBotUsername, errlog)
+	basicBaleHandler := balehandlers.NewBasicHandler(chatService, chatHisService, attachService, sentbalemsgService, s3Repo, env.S3.Bucket, log, errlog)
+	directFeatChatCommandBaleHandler := balehandlers.NewDirectFeatChatCommandHandler(chatLinkService, errlog)
+	featChannelBaleHandler := balehandlers.NewFeatChannelHandler(chatLinkService, env.Bot.BaleBotUsername, errlog)
 
-	// baleHandlers := balehandlers.BaleHandlers{
-	// 	BasicHandler:                 basicBaleHandler,
-	// 	DirectFeatChatCommandHandler: directFeatChatCommandBaleHandler,
-	// 	FeatChannelHandler:           featChannelBaleHandler,
-	// }
+	baleHandlers := balehandlers.BaleHandlers{
+		BasicHandler:                 basicBaleHandler,
+		DirectFeatChatCommandHandler: directFeatChatCommandBaleHandler,
+		FeatChannelHandler:           featChannelBaleHandler,
+	}
 
-	// baleDeps := balerouter.Dependencies{
-	// 	Repositories: Repos,
-	// 	Services:     Services,
-	// 	BaleHandlers: baleHandlers,
-	// 	Logger:       log,
-	// 	BaleLogger:   baleLogger,
-	// }
-	// baleCfg := balerouter.Config{
-	// 	Token:       env.Bot.BaleBotToken,
-	// 	BotUsername: env.Bot.BaleBotUsername,
-	// }
+	baleDeps := balerouter.Dependencies{
+		Repositories: Repos,
+		Services:     Services,
+		BaleHandlers: baleHandlers,
+		Logger:       log,
+		BaleLogger:   baleLogger,
+	}
+	baleCfg := balerouter.Config{
+		Token:       env.Bot.BaleBotToken,
+		BotUsername: env.Bot.BaleBotUsername,
+	}
 
 	// --- Start whichever adapters have a bot token configured ----------
 	var clients []messenger.MessengerClient
@@ -295,13 +296,14 @@ func Init(ctx context.Context) (*App, error) {
 		clients = append(clients, telegramAdapter)
 	}
 	//todo
-	// baleAdapter, err := newBaleAdapter(env.Bot.BaleBotToken, baleDeps, baleCfg, log)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// if baleAdapter != nil {
-	// 	clients = append(clients, baleAdapter)
-	// }
+
+	baleAdapter, err := newBaleAdapter(env.Bot.BaleBotToken, baleDeps, baleCfg, log)
+	if err != nil {
+		return nil, err
+	}
+	if baleAdapter != nil {
+		clients = append(clients, baleAdapter)
+	}
 
 	// ----------------------------------------------------------------
 	// 12. Broadcast service — depends on the messaging clients above.
@@ -369,8 +371,8 @@ func Init(ctx context.Context) (*App, error) {
 		Router: apirouter.New(deps, newAPIRouterConfig(env)),
 
 		telegramAdapter: telegramAdapter,
-		//todo
-		baleAdapter: nil, // baleAdapter,
+
+		baleAdapter: baleAdapter, // nil, // baleAdapter,
 
 		emailPool:     emailPool,
 		broadcastPool: broadcastPool,

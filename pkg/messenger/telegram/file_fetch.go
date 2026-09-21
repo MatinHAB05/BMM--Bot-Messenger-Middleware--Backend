@@ -14,9 +14,13 @@ import (
 type FetchedFile struct {
 	// Body is the file's content stream. Callers MUST Close() it.
 	Body io.ReadCloser
-	// FileSize is Telegram's own reported size for the file, in bytes
-	// (0 if Telegram didn't report one -- this happens for some file
-	// types). Pass it to StorageRepository.UploadFile's objectSize.
+	// FileSize is the byte count to pass to
+	// StorageRepository.UploadFile's objectSize. It's -1 (unknown) when
+	// neither the download response nor the Bot API could tell us a
+	// trustworthy size -- callers must NOT treat 0 as "empty file" and
+	// must forward -1 as-is (minio-go switches to a streaming multipart
+	// upload for -1, so an unknown size is safe, just slightly less
+	// efficient than a known one).
 	FileSize int64
 }
 
@@ -49,5 +53,14 @@ func FetchFile(ctx context.Context, bot *tgbot.Bot, platformFileID string) (*Fet
 		return nil, fmt.Errorf("telegram: download file %q: unexpected status %d", platformFileID, resp.StatusCode)
 	}
 
-	return &FetchedFile{Body: resp.Body, FileSize: file.FileSize}, nil
+	// ? FUCK BALE : Bale fill filesizes with zero values :/
+	size := resp.ContentLength
+	if size <= 0 {
+		size = file.FileSize
+	}
+	if size <= 0 {
+		size = -1
+	}
+
+	return &FetchedFile{Body: resp.Body, FileSize: size}, nil
 }
