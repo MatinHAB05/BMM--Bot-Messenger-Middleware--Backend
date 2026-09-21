@@ -2,7 +2,10 @@ package balehandlers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strconv"
+	"time"
 
 	service_contract "messenger-backend/internal/application/contract"
 	"messenger-backend/internal/domain/entity"
@@ -10,7 +13,7 @@ import (
 	"messenger-backend/pkg/logger"
 	"messenger-backend/pkg/messenger/telegram"
 
-	"gorm.io/datatypes"
+	"github.com/go-telegram/bot"
 )
 
 type BasicHandler struct {
@@ -77,45 +80,66 @@ func (h *BasicHandler) OnUpdate(ctx context.Context, u telegram.ChatUpdate) {
 // It does NOT assume OnUpdate already ran for this same update
 // (the two callbacks are independent), so it resolves-or-half-creates the
 // chat itself first.
-func (h *BasicHandler) OnMessage(ctx context.Context, msg telegram.MessageUpdate) {
-	chat, err := h.findOrHalfCreateChat(ctx, msg.TargetID, msg.ChatTitle, msg.ChatType)
+func (h *BasicHandler) OnMessage(ctx context.Context, bot *bot.Bot, update *telegram.Update) {
+	msg := telegram.ExtractRawMessage(update)
+	if msg == nil {
+		return
+	}
+
+	platformChatID := strconv.FormatInt(msg.Chat.ID, 10)
+
+	chat, err := h.findOrHalfCreateChat(ctx, platformChatID, telegram.ChatTitle(msg.Chat), string(msg.Chat.Type))
 	if err != nil {
 		h.errLog.Error(
 			err,
 			"failed to resolve or half-create chat on message",
-			logger.String("platform_chat_id", msg.TargetID),
+			logger.String("platform_chat_id", platformChatID),
 		)
 		return
 	}
 
-	ex, err := h.sentbalemsgService.HasSentBaleMsg(ctx, msg.TargetID, msg.Content) // ? : FUCK BALE!
+	content := msg.Text
+	if content == "" {
+		// todo
+		// content = caption
+		content = "?"
+	}
+
+	ex, err := h.sentbalemsgService.HasSentBaleMsg(ctx, platformChatID, content) // ? : FUCK BALE!
 	if err != nil {
-		h.log.Error(err, "failed to check sent bale msg", logger.String("chat_id", msg.TargetID))
+		h.log.Error(err, "failed to check sent bale msg", logger.String("chat_id", platformChatID))
 		return
 	}
 	if ex == nil || *ex {
 		if ex == nil {
-			h.log.Error(errors.New("has sent bale msg returned nil result"), "unexpected nil result", logger.String("chat_id", msg.TargetID))
+			h.log.Error(errors.New("has sent bale msg returned nil result"), "unexpected nil result", logger.String("chat_id", platformChatID))
 		} else {
-			h.log.Info("bale message already sent, skipping", logger.String("chat_id", msg.TargetID), logger.String("content", msg.Content))
+			h.log.Info("bale message already sent, skipping", logger.String("chat_id", platformChatID), logger.String("content", content))
 		}
 		return
 	}
 
+	rawPayload, err := json.Marshal(update)
+	if err != nil {
+		h.errLog.Error(err, "failed to marshal raw update payload", logger.String("platform_chat_id", platformChatID))
+		rawPayload = []byte("{}")
+	}
+
 	if _, err := h.chatHistoryService.Upsert(ctx, &service_contract.CreateMessageRequest{
 		ChatID:            chat.ID,
-		PlatformMessageID: msg.PlatformMessageID,
-		SenderID:          msg.SenderID,
-		SenderName:        msg.SenderName,
-		Content:           msg.Content,
-		MediaType:         msg.MediaType,
-		RawPayload:        datatypes.JSON(msg.RawPayload),
-		MessageTimestamp:  msg.Timestamp,
+		PlatformMessageID: int64(msg.ID),
+		SenderID:          telegram.SenderID(msg.From),
+		SenderName:        telegram.SenderDisplayName(msg.From),
+		Content:           content,
+		//todo
+		MediaType:        "?", //msg.MediaType,
+		RawPayload:       rawPayload,
+		MessageTimestamp: time.Unix(int64(msg.Date), 0).UTC(),
 	}); err != nil {
 		h.errLog.Error(
 			err,
 			"failed to create history for chat",
-			logger.String("platform_chat_id", msg.TargetID),
+			logger.String("platform_chat_id", platformChatID),
 		)
 	}
 }

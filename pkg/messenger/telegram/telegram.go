@@ -58,7 +58,7 @@ type MessageUpdate struct {
 }
 
 type UpdateHandler func(ctx context.Context, update ChatUpdate)
-type MessageHandler func(ctx context.Context, msg *Update)
+type MessageHandler func(ctx context.Context, bot *tgbot.Bot, update *Update)
 type TelegramHandler func(ctx context.Context, bot *tgbot.Bot, update *models.Update)
 
 // RouterFunc allows external packages to attach custom handlers, middlewares, or routes to the bot.
@@ -226,7 +226,7 @@ func (a *Adapter) handler(onUpdate UpdateHandler, onMessage MessageHandler) func
 
 			if onMessage != nil {
 				log.Println("im a onMessage")
-				onMessage(ctx, update)
+				onMessage(ctx, b, update)
 			}
 			next(ctx, b, update)
 		}

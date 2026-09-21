@@ -1,6 +1,5 @@
 package telegramhandlers
 
-//todo : refactor!
 import (
 	"context"
 	"encoding/json"
@@ -15,6 +14,8 @@ import (
 	repository_contract "messenger-backend/internal/domain/repository"
 	"messenger-backend/pkg/logger"
 	"messenger-backend/pkg/messenger/telegram"
+
+	tgbot "github.com/go-telegram/bot"
 )
 
 type BasicHandler struct {
@@ -22,7 +23,6 @@ type BasicHandler struct {
 	chatHistoryService service_contract.ChatHistoryService
 	attachmentService  service_contract.AttachmentService
 	storageRepo        repository_contract.StorageRepository
-	telegramAdapter    *telegram.Adapter
 	bucketName         string
 	log                logger.Logger
 	errLog             logger.Logger
@@ -33,7 +33,6 @@ func NewBasicHandler(
 	chatHistoryService service_contract.ChatHistoryService,
 	attachmentService service_contract.AttachmentService,
 	storageRepo repository_contract.StorageRepository,
-	telegramAdapter *telegram.Adapter,
 	bucketName string,
 	log logger.Logger,
 	errLog logger.Logger,
@@ -43,7 +42,6 @@ func NewBasicHandler(
 		chatHistoryService: chatHistoryService,
 		attachmentService:  attachmentService,
 		storageRepo:        storageRepo,
-		telegramAdapter:    telegramAdapter,
 		bucketName:         bucketName,
 		log:                log.With(logger.String("component", "BasicHandler_Telegram")),
 		errLog:             errLog.With(logger.String("component", "BasicHandler_Telegram")),
@@ -103,7 +101,7 @@ func (h *BasicHandler) OnUpdate(ctx context.Context, u telegram.ChatUpdate) {
 // blocks the message itself from being saved -- see uploadAttachmentMedia's
 // doc comment.
 //
-// Parameter is *telegram.Update -- a re-export of the SDK's raw update
+// Parameter is *telegram.Update -- a re-export of the SDK'raw update
 // type (github.com/go-telegram/bot/models.Update), kept for the same
 // reason as before: extracting Photo/Video/Document/Audio/Voice/Animation
 // needs fields telegram.MessageUpdate doesn't carry. All the raw-model
@@ -112,7 +110,7 @@ func (h *BasicHandler) OnUpdate(ctx context.Context, u telegram.ChatUpdate) {
 // senderID, senderName, telegramMediaType) now lives behind package
 // telegram -- this file no longer imports github.com/go-telegram/bot/models
 // at all.
-func (h *BasicHandler) OnMessage(ctx context.Context, update *telegram.Update) {
+func (h *BasicHandler) OnMessage(ctx context.Context, bot *tgbot.Bot, update *telegram.Update) {
 	msg := telegram.ExtractRawMessage(update)
 	if msg == nil {
 		return
@@ -133,7 +131,7 @@ func (h *BasicHandler) OnMessage(ctx context.Context, update *telegram.Update) {
 	tgAttachments, caption := telegram.ExtractAttachments(msg)
 	attachments := toCreateAttachmentRequests(tgAttachments)
 	for i := range attachments {
-		h.uploadAttachmentMedia(ctx, chat.CompanyID, chat.ID, &attachments[i])
+		h.uploadAttachmentMedia(ctx, bot, chat.CompanyID, chat.ID, &attachments[i])
 	}
 
 	content := msg.Text
@@ -157,6 +155,7 @@ func (h *BasicHandler) OnMessage(ctx context.Context, update *telegram.Update) {
 		RawPayload:        rawPayload,
 		MessageTimestamp:  time.Unix(int64(msg.Date), 0).UTC(),
 		Attachments:       attachments,
+		MediaGroupID:      msg.MediaGroupID,
 	}); err != nil {
 		h.errLog.Error(
 			err,
@@ -174,10 +173,10 @@ func (h *BasicHandler) OnMessage(ctx context.Context, update *telegram.Update) {
 // use to fetch the bytes again later) -- losing the whole message over a
 // transient MinIO or Telegram hiccup would be worse than a temporarily
 // empty StoragePath.
-func (h *BasicHandler) uploadAttachmentMedia(ctx context.Context, companyID *uint, chatID uint, att *service_contract.CreateAttachmentRequest) {
+func (h *BasicHandler) uploadAttachmentMedia(ctx context.Context, bot *tgbot.Bot, companyID *uint, chatID uint, att *service_contract.CreateAttachmentRequest) {
 	if att.PlatformFileID != "" {
 		objectKey := buildObjectKey(companyID, chatID, att.FileType, time.Now(), att.PlatformFileID)
-		if path, err := h.fetchAndUpload(ctx, att.PlatformFileID, objectKey, att.MimeType); err != nil {
+		if path, err := h.fetchAndUpload(ctx, bot, att.PlatformFileID, objectKey, att.MimeType); err != nil {
 			h.errLog.Error(err, "failed to fetch/upload attachment media",
 				logger.String("platform_file_id", att.PlatformFileID), logger.Uint("chat_id", chatID))
 		} else {
@@ -187,7 +186,7 @@ func (h *BasicHandler) uploadAttachmentMedia(ctx context.Context, companyID *uin
 
 	if att.ThumbnailPlatformFileID != "" {
 		objectKey := buildObjectKey(companyID, chatID, "thumbnail", time.Now(), att.ThumbnailPlatformFileID)
-		if path, err := h.fetchAndUpload(ctx, att.ThumbnailPlatformFileID, objectKey, "image/jpeg"); err != nil {
+		if path, err := h.fetchAndUpload(ctx, bot, att.ThumbnailPlatformFileID, objectKey, "image/jpeg"); err != nil {
 			h.errLog.Error(err, "failed to fetch/upload attachment thumbnail",
 				logger.String("thumbnail_platform_file_id", att.ThumbnailPlatformFileID), logger.Uint("chat_id", chatID))
 		} else {
@@ -199,8 +198,8 @@ func (h *BasicHandler) uploadAttachmentMedia(ctx context.Context, companyID *uin
 // fetchAndUpload resolves platformFileID to bytes via Telegram's getFile
 // + download-link flow, then streams those bytes straight into MinIO
 // under objectKey -- the response body is never fully buffered in memory.
-func (h *BasicHandler) fetchAndUpload(ctx context.Context, platformFileID, objectKey, contentType string) (string, error) {
-	fetched, err := h.telegramAdapter.FetchFile(ctx, platformFileID)
+func (h *BasicHandler) fetchAndUpload(ctx context.Context, bot *tgbot.Bot, platformFileID, objectKey, contentType string) (string, error) {
+	fetched, err := telegram.FetchFile(ctx, bot, platformFileID)
 	if err != nil {
 		return "", fmt.Errorf("fetch from telegram: %w", err)
 	}

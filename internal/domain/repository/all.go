@@ -8,8 +8,10 @@ type Repositories struct {
 	ChatRepository
 	CompanyRepository
 	OTPRepository
+	MediaGroupRepository
 	RateLimiterRepository
 	RBACRepository
 	SentBaleMsgRepository
+	StorageRepository
 	UserRepository
 }

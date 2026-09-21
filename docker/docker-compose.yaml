@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   postgres:
     image: postgres:15-alpine
@@ -67,11 +65,11 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY_ID:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_ACCESS_KEY:-minioadmin}
     ports:
       - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001" #
+      - "${MINIO_CONSOLE_PORT:-9001}:9001" 
     volumes:
       - minio_data:/data
     healthcheck:

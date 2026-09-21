@@ -11,7 +11,7 @@ ADD
 
 -- +goose Down
 ALTER TABLE
-    users DROP COLUMN IF EXISTS is_verified_phone;
+    chat_histories DROP COLUMN IF EXISTS broadcast_uuid;
 
 ALTER TABLE
-    users DROP COLUMN IF EXISTS is_verified_email;
+    chat_histories DROP COLUMN IF EXISTS is_broadcast;

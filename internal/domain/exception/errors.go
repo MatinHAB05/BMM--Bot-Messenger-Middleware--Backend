@@ -113,11 +113,12 @@ var (
 	ErrMessageNotFound              = &AppError{Code: "MESSAGE_NOT_FOUND", Message: "message not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainMessageNotFound}
 
 	// RBAC
-	ErrRoleNotFound        = &AppError{Code: "ROLE_NOT_FOUND", Message: "role not found or has no permissions", HTTPStatus: http.StatusNotFound, Err: ErrDomainRoleNotFound}
-	ErrPermissionNotFound  = &AppError{Code: "PERMISSION_NOT_FOUND", Message: "permission not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainPermissionNotFound}
-	ErrEnforcerNil         = &AppError{Code: "ENFORCER_NIL", Message: "enforcer instance is not initialized", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainEnforcerNil}
-	ErrRoleSyncFailed      = &AppError{Code: "ROLE_SYNC_FAILED", Message: "failed to synchronize user roles with the policy store", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainRoleSyncFailed}
-	ErrSentBaleMsgNotFound = &AppError{Code: "SENT_BALE_MSG_NOTFOUND", Message: "sent bale msg nt found", HTTPStatus: http.StatusNotFound, Err: ErrDomainSentBaleMsgNotFound}
+	ErrRoleNotFound          = &AppError{Code: "ROLE_NOT_FOUND", Message: "role not found or has no permissions", HTTPStatus: http.StatusNotFound, Err: ErrDomainRoleNotFound}
+	ErrPermissionNotFound    = &AppError{Code: "PERMISSION_NOT_FOUND", Message: "permission not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainPermissionNotFound}
+	ErrEnforcerNil           = &AppError{Code: "ENFORCER_NIL", Message: "enforcer instance is not initialized", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainEnforcerNil}
+	ErrRoleSyncFailed        = &AppError{Code: "ROLE_SYNC_FAILED", Message: "failed to synchronize user roles with the policy store", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainRoleSyncFailed}
+	ErrSentBaleMsgNotFound   = &AppError{Code: "SENT_BALE_MSG_NOTFOUND", Message: "sent bale msg nt found", HTTPStatus: http.StatusNotFound, Err: ErrDomainSentBaleMsgNotFound}
+	ErrMediaGroupMsgNotFound = &AppError{Code: "ErrMediaGroupMsgNotFound", Message: "ErrMediaGroupMsgNotFound", HTTPStatus: http.StatusNotFound, Err: ErrDomainSentBaleMsgNotFound}
 
 	// General & Infrastructure
 	ErrDatabaseOperation   = &AppError{Code: "DATABASE_ERROR", Message: "database operation failed", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainDatabaseOperation}

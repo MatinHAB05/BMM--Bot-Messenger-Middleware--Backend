@@ -91,6 +91,16 @@ type EmailConfig struct {
 	LogInFile           bool   `mapstructure:"BMM_EMAIL_LOG_IN_FILE" json:"bmm_email_log_in_file"`
 }
 
+type S3Config struct {
+	Endpoint        string `json:"endpoint" mapstructure:"MINIO_ENDPOINT"`
+	AccessKeyID     string `json:"access_key_id" mapstructure:"MINIO_ACCESS_KEY_ID"`
+	SecretAccessKey string `json:"secret_access_key" mapstructure:"MINIO_SECRET_ACCESS_KEY"`
+	UseSSL          bool   `json:"use_ssl" mapstructure:"MINIO_USE_SSL"`
+	Region          string `json:"region" mapstructure:"MINIO_REGION"`
+	Bucket          string `json:"bucket" mapstructure:"MINIO_BUCKET"`
+	MaxConcurrency  int    `json:"max_currency" mapstructure:"MINIO_MAX_CURRENCY"`
+}
+
 type Environment struct {
 	App       AppConfig       `mapstructure:",squash" json:"app"`
 	Database  DatabaseConfig  `mapstructure:",squash" json:"database"`
@@ -104,6 +114,7 @@ type Environment struct {
 	Casbin    CasbinConfig    `mapstructure:",squash" json:"casbin"`
 	Migration MigrationConfig `mapstructure:",squash" json:"migration"`
 	Email     EmailConfig     `mapstructure:",squash" json:"email"`
+	S3        S3Config        `mapstructure:",squash" json:"s3"`
 }
 
 func LoadEnvironment() *Environment {

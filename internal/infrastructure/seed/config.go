@@ -77,10 +77,14 @@ var DefaultAdminPolicies = []policyRule{
 	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/attachments/:id/thumbnail", Method: "PATCH"}},
 	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/attachments/:id", Method: "DELETE"}},
 	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/attachments/:id/restore", Method: "POST"}},
+	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/attachments/:id/links/download", Method: "POST"}},
+	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/attachments/:id/links/download/batch", Method: "POST"}},
 
 	// Message Attachments (Nested)
-	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/chats/:chat_id/history/:message_id/attachments", Method: "POST"}},
-	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/chats/:chat_id/history/:message_id/attachments/batch", Method: "POST"}},
-	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/chats/:chat_id/history/:message_id/attachments", Method: "GET"}},
-	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/chats/:chat_id/history/:message_id/attachments", Method: "DELETE"}},
+	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/chats/:id/history/:message_id/attachments", Method: "POST"}},
+	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/chats/:id/history/:message_id/attachments/batch", Method: "POST"}},
+	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/chats/:id/history/:message_id/attachments/links/download", Method: "POST"}},
+	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/chats/:id/history/:message_id/attachments/links/download/batch", Method: "POST"}},
+	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/chats/:id/history/:message_id/attachments", Method: "GET"}},
+	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/chats/:id/history/:message_id/attachments", Method: "DELETE"}},
 }

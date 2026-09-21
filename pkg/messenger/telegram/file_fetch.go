@@ -27,13 +27,13 @@ type FetchedFile struct {
 // opposed to the Bot API proper) -- keeping it here, alongside SendMessage
 // and Listen, is what keeps all Telegram-specific mechanics out of the
 // application/handler layers.
-func (a *Adapter) FetchFile(ctx context.Context, platformFileID string) (*FetchedFile, error) {
-	file, err := a.bot.GetFile(ctx, &tgbot.GetFileParams{FileID: platformFileID})
+func FetchFile(ctx context.Context, bot *tgbot.Bot, platformFileID string) (*FetchedFile, error) {
+	file, err := bot.GetFile(ctx, &tgbot.GetFileParams{FileID: platformFileID})
 	if err != nil {
 		return nil, fmt.Errorf("telegram: get file %q: %w", platformFileID, err)
 	}
 
-	downloadURL := a.bot.FileDownloadLink(file)
+	downloadURL := bot.FileDownloadLink(file)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
 	if err != nil {

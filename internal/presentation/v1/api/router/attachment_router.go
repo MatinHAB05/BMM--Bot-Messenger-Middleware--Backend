@@ -30,14 +30,21 @@ func RegisterAttachmentRoutes(v1 *gin.RouterGroup, deps Dependencies) {
 	attachments.PATCH("/:id/thumbnail", deps.AttachmentHandler.UpdateThumbnailID)
 	attachments.DELETE("/:id", deps.AttachmentHandler.DeleteAttachmentByID)
 	attachments.POST("/:id/restore", deps.AttachmentHandler.RestoreAttachmentByID)
+	attachments.POST("/:id/links/download", deps.GetDownloadLinksAttachmentsByMessageID)
+	attachments.POST("/:id/links/download/batch", deps.BatchGetDownloadLinksAttachmentsByMessageID)
 
 	// Nested under a single message (chat history row): creating and
 	// bulk-reading/deleting attachments in the context of "this message".
-	messageAttachments := v1.Group("/chats/:chat_id/history/:message_id/attachments")
+	messageAttachments := v1.Group("/chats/:id/history/:message_id/attachments")
 	messageAttachments.Use(apimiddleware.Auth(deps.TokenMaker, deps.AuthnTokenRepository, deps.Logger))
 	messageAttachments.Use(apimiddleware.RBAC(deps.RBACRepository, deps.Logger))
 
 	messageAttachments.POST("", deps.AttachmentHandler.CreateAttachment)
+
+	// todo : need add srv func
+	// messageAttachments.POST("/links/download", deps.AttachmentHandler.GetDownloadLinksAttachmentsByMessageID)
+	// messageAttachments.POST("links/download/batch", deps.AttachmentHandler.BatchGetDownloadLinksAttachmentsByMessageID)
+
 	messageAttachments.POST("/batch", deps.AttachmentHandler.CreateAttachmentsBatch)
 	messageAttachments.GET("", deps.AttachmentHandler.GetAttachmentsByMessageID)
 	messageAttachments.DELETE("", deps.AttachmentHandler.DeleteAttachmentsByMessageID)

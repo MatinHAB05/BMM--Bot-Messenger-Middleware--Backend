@@ -114,12 +114,82 @@ func (h *AttachmentHandler) GetAttachmentsByMessageID(c *gin.Context) {
 	success(c, http.StatusOK, resp)
 }
 
+// func (h *AttachmentHandler) GetDownloadLinksAttachmentsByMessageID(c *gin.Context) {
+// 	chatHistoryID, err := parseUintParam(c, "message_id")
+// 	if err != nil {
+// 		fail(c, err)
+// 		return
+// 	}
+
+// 	resp, err := h.attachmentService.GetAttachmentDownloadURL(c.Request.Context(), chatHistoryID)
+// 	if err != nil {
+// 		fail(c, err)
+// 		return
+// 	}
+
+// 	success(c, http.StatusOK, resp)
+// }
+
+// func (h *AttachmentHandler) BatchGetDownloadLinksAttachmentsByMessageID(c *gin.Context) {
+// 	var req getByChatHistoryIDsBatchRequest
+// 	if err := c.ShouldBindJSON(&req); err != nil {
+// 		fail(c, exception.Wrap(exception.ErrBadRequest, err))
+// 		return
+// 	}
+
+// 	resp, err := h.attachmentService.GetAttachmentsDownloadURLsBatch(c.Request.Context(), req.ChatHistoryIDs)
+// 	if err != nil {
+// 		fail(c, err)
+// 		return
+// 	}
+
+// 	success(c, http.StatusOK, resp)
+
+// }
+
+func (h *AttachmentHandler) GetDownloadLinksAttachmentsByMessageID(c *gin.Context) {
+	attachID, err := parseUintParam(c, "id")
+	if err != nil {
+		fail(c, err)
+		return
+	}
+
+	resp, err := h.attachmentService.GetAttachmentDownloadURL(c.Request.Context(), attachID)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+
+	success(c, http.StatusOK, resp)
+}
+
+func (h *AttachmentHandler) BatchGetDownloadLinksAttachmentsByMessageID(c *gin.Context) {
+	var req getByAttachIDsBatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, exception.Wrap(exception.ErrBadRequest, err))
+		return
+	}
+
+	resp, err := h.attachmentService.GetAttachmentsDownloadURLsBatch(c.Request.Context(), req.AttachIDs)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+
+	success(c, http.StatusOK, resp)
+
+}
+
 // getByChatHistoryIDsBatchRequest is the body for the batch-by-message
 // lookup -- a POST-with-body rather than repeated query params, since an
 // arbitrarily long id list is unwieldy (and easy to get wrong) as a query
 // string.
 type getByChatHistoryIDsBatchRequest struct {
 	ChatHistoryIDs []uint `json:"chat_history_ids" binding:"required,min=1"`
+}
+
+type getByAttachIDsBatchRequest struct {
+	AttachIDs []uint `json:"attachment_ids" binding:"required,min=1"`
 }
 
 // GetAttachmentsByChatHistoryIDsBatch handles POST /attachments/by-messages.

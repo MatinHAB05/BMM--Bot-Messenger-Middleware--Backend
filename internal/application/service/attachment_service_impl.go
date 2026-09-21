@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"mime/multipart"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,6 +29,8 @@ import (
 // through repository_contract.StorageRepository, never minio-go directly
 // (see that interface's doc comment).
 type attachmentService struct {
+	mediaGroupService service_contract.MediaGroupService
+
 	attachmentRepo  repository_contract.AttachmentRepository
 	chatHistoryRepo repository_contract.ChatHistoryRepository
 	storageRepo     repository_contract.StorageRepository
@@ -39,9 +44,14 @@ type attachmentService struct {
 	// presignExpiry bounds how long a GetAttachmentDownloadURL /
 	// GetAttachmentsDownloadURLsBatch link stays valid.
 	presignExpiry time.Duration
+
+	// groupLocks serializes ingestion of updates that belong to the same
+	// media group (see IngestMessageWithAttachments).
+	groupLocks mediaGroupLocks
 }
 
 func NewAttachmentService(
+	mediaGroupService service_contract.MediaGroupService,
 	attachmentRepo repository_contract.AttachmentRepository,
 	chatHistoryRepo repository_contract.ChatHistoryRepository,
 	storageRepo repository_contract.StorageRepository,
@@ -54,13 +64,14 @@ func NewAttachmentService(
 		presignExpiry = 15 * time.Minute
 	}
 	return &attachmentService{
-		attachmentRepo:  attachmentRepo,
-		chatHistoryRepo: chatHistoryRepo,
-		storageRepo:     storageRepo,
-		trxManager:      trxManager,
-		log:             log.With(logger.String("component", "attachment_service")),
-		bucketName:      bucketName,
-		presignExpiry:   presignExpiry,
+		mediaGroupService: mediaGroupService,
+		attachmentRepo:    attachmentRepo,
+		chatHistoryRepo:   chatHistoryRepo,
+		storageRepo:       storageRepo,
+		trxManager:        trxManager,
+		log:               log.With(logger.String("component", "attachment_service")),
+		bucketName:        bucketName,
+		presignExpiry:     presignExpiry,
 	}
 }
 
@@ -456,7 +467,83 @@ func (s *attachmentService) ReplaceMessageAttachments(ctx context.Context, chatH
 	return service_contract.ToAttachmentResponses(entities), nil
 }
 
-// IngestMessageWithAttachments persists one ChatHistory row and its
+// IngestMessageWithAttachments persists one message and its attachments.
+//
+// Without req.MediaGroupID it is a plain "one ChatHistory + its
+// attachments" transaction (createMessageWithAttachments).
+//
+// With req.MediaGroupID it handles Telegram/Bale albums, which arrive as
+// separate updates (one file each) sharing a media_group_id:
+//
+//   - the first update of a (chat, media group) pair creates the
+//     ChatHistory + its attachment, then registers
+//     (mediaGroupID, chatID) -> chatHistoryID in MediaGroupService;
+//   - every later update finds that entry and only adds its attachment(s)
+//     to the already-registered ChatHistory.
+//
+// chatID in the cache key is OUR chat_histories.chat_id (DB id), and the
+// cached value is OUR chat_histories.id -- never Telegram ids.
+//
+// Updates of one album are usually processed concurrently, so the
+// check -> create -> register sequence runs under a per-(chat, group)
+// lock; without it two updates could both see "new group" and each create
+// its own ChatHistory.
+func (s *attachmentService) IngestMessageWithAttachments(ctx context.Context, req service_contract.IngestMessageWithAttachmentsRequest) error {
+	if req.MediaGroupID == "" {
+		_, err := s.createMessageWithAttachments(ctx, req)
+		return err
+	}
+
+	unlock := s.groupLocks.lock(req.ChatID, req.MediaGroupID)
+	defer unlock()
+
+	chatKey := strconv.FormatUint(uint64(req.ChatID), 10)
+
+	cachedID, err := s.mediaGroupService.GetMediaGroup(ctx, req.MediaGroupID, chatKey)
+	switch {
+	case err == nil:
+		// Known group: add this update's attachment(s) to the existing message.
+		err = s.appendToMessage(ctx, req, *cachedID)
+		if !errors.Is(err, exception.ErrMessageNotFound) {
+			return err // nil on success, real error otherwise
+		}
+		// The cached message no longer exists (deleted in the meantime):
+		// the entry is stale, so fall through and start a fresh message.
+		s.log.Warn("media group points at a missing chat history; starting a new one",
+			logger.String("media_group_id", req.MediaGroupID),
+			logger.Uint("chat_history_id", *cachedID),
+		)
+	case errors.Is(err, exception.ErrMediaGroupMsgNotFound):
+		// First update of this group: create it below.
+	default:
+		// Cache trouble (e.g. Redis down). Don't drop the message: degrade
+		// to the old behaviour (own ChatHistory) rather than failing.
+		s.log.Warn("media group cache lookup failed; ingesting without grouping",
+			logger.Err(err),
+			logger.String("media_group_id", req.MediaGroupID),
+		)
+	}
+
+	chatHistoryID, err := s.createMessageWithAttachments(ctx, req)
+	if err != nil {
+		return err
+	}
+
+	// Register only AFTER the transaction committed, so the cache never
+	// points at a row that doesn't exist. A failure here is not fatal --
+	// the message is already stored -- it only means later album items
+	// won't be grouped with it.
+	if err := s.mediaGroupService.SetMediaGroup(ctx, req.MediaGroupID, chatKey, chatHistoryID); err != nil {
+		s.log.Warn("failed to register media group; later album items will not be grouped",
+			logger.Err(err),
+			logger.String("media_group_id", req.MediaGroupID),
+			logger.Uint("chat_history_id", chatHistoryID),
+		)
+	}
+	return nil
+}
+
+// createMessageWithAttachments persists one ChatHistory row and its
 // attachments as a single transaction: chatHistoryRepo.Create and
 // attachmentRepo.CreateBatch are both called with trxCtx (the context
 // TrxManager injected its transaction into), so both repositories --
@@ -465,7 +552,8 @@ func (s *attachmentService) ReplaceMessageAttachments(ctx context.Context, chatH
 // neither does. Any StoragePath/ThumbnailStoragePath already set on
 // req.Attachments (by the caller, having already uploaded to MinIO) is
 // persisted as-is -- this method does not itself touch object storage.
-func (s *attachmentService) IngestMessageWithAttachments(ctx context.Context, req service_contract.IngestMessageWithAttachmentsRequest) error {
+// It returns the new ChatHistory's ID.
+func (s *attachmentService) createMessageWithAttachments(ctx context.Context, req service_contract.IngestMessageWithAttachmentsRequest) (uint, error) {
 	message := &entity.ChatHistory{
 		ChatID:            req.ChatID,
 		PlatformMessageID: req.PlatformMessageID,
@@ -490,12 +578,67 @@ func (s *attachmentService) IngestMessageWithAttachments(ctx context.Context, re
 		return s.attachmentRepo.CreateBatch(trxCtx, attachments)
 	})
 	if err != nil {
-		return exception.Wrap(exception.ErrInternal, err)
+		return 0, exception.Wrap(exception.ErrInternal, err)
 	}
 
 	s.log.Info("message ingested with attachments",
 		logger.Uint("chat_id", req.ChatID),
 		logger.Uint("chat_history_id", message.ID),
+		logger.Int("attachment_count", len(req.Attachments)),
+	)
+	return message.ID, nil
+}
+
+// appendToMessage adds req's attachments to the existing ChatHistory
+// chatHistoryID (a later item of a media group). It also keeps the
+// message row coherent with what has been added so far:
+//
+//   - Content: Telegram puts an album's caption on just ONE of its items,
+//     not necessarily the first one to arrive -- so an empty Content is
+//     filled in by whichever update carries the caption.
+//   - MediaType: becomes "mixed" once the message holds attachments of
+//     different file types (see entity.ChatHistory's doc comment).
+//
+// Returns exception.ErrMessageNotFound (unwrapped) if the ChatHistory is
+// gone, so the caller can treat the cache entry as stale.
+func (s *attachmentService) appendToMessage(ctx context.Context, req service_contract.IngestMessageWithAttachmentsRequest, chatHistoryID uint) error {
+	message, err := s.chatHistoryRepo.FindByID(ctx, req.ChatID, chatHistoryID)
+	if err != nil {
+		if errors.Is(err, exception.ErrMessageNotFound) {
+			return err
+		}
+		return exception.Wrap(exception.ErrInternal, err)
+	}
+
+	changed := false
+	if message.Content == "" && req.Content != "" {
+		message.Content = req.Content
+		changed = true
+	}
+	if merged := mergeMediaType(message.MediaType, req.MediaType); merged != message.MediaType {
+		message.MediaType = merged
+		changed = true
+	}
+
+	err = s.trxManager.WithTransaction(ctx, func(trxCtx context.Context) error {
+		if changed {
+			if err := s.chatHistoryRepo.Upsert(trxCtx, message); err != nil {
+				return err
+			}
+		}
+		if len(req.Attachments) == 0 {
+			return nil
+		}
+		return s.attachmentRepo.CreateBatch(trxCtx, service_contract.ToAttachmentEntities(message.ID, req.Attachments))
+	})
+	if err != nil {
+		return exception.Wrap(exception.ErrInternal, err)
+	}
+
+	s.log.Info("attachment(s) added to existing message (media group)",
+		logger.Uint("chat_id", req.ChatID),
+		logger.Uint("chat_history_id", message.ID),
+		logger.String("media_group_id", req.MediaGroupID),
 		logger.Int("attachment_count", len(req.Attachments)),
 	)
 	return nil
@@ -531,4 +674,34 @@ func buildDirectUploadObjectKey(chatHistoryID uint, fileName string) string {
 		safeName = uuid.NewString()
 	}
 	return fmt.Sprintf("direct/chat_histories/%d/%04d/%02d/%s", chatHistoryID, now.Year(), int(now.Month()), safeName)
+}
+
+// mergeMediaType returns the ChatHistory.MediaType a message should have
+// after receiving an attachment of type incoming: unchanged if the types
+// agree (or it is already "mixed"), "mixed" otherwise.
+func mergeMediaType(current, incoming string) string {
+	if incoming == "" || current == incoming || current == "mixed" {
+		return current
+	}
+	return "mixed"
+}
+
+// mediaGroupLocks is a fixed set of mutexes ("striped locks") keyed by a
+// hash of (chatID, mediaGroupID). Two updates of the same album always map
+// to the same stripe and are therefore serialized; unrelated albums may
+// share a stripe by chance, which only costs a brief wait. No per-key
+// allocation, nothing to clean up.
+//
+// This serializes within ONE process. If the bot ever runs as several
+// replicas that can receive updates of the same album, the check-then-create
+// in IngestMessageWithAttachments needs a distributed guard as well (e.g.
+// an atomic Redis SET NX claim or a Postgres advisory lock).
+type mediaGroupLocks [64]sync.Mutex
+
+func (l *mediaGroupLocks) lock(chatID uint, mediaGroupID string) (unlock func()) {
+	h := fnv.New32a()
+	fmt.Fprintf(h, "%d:%s", chatID, mediaGroupID)
+	m := &l[h.Sum32()%uint32(len(l))]
+	m.Lock()
+	return m.Unlock
 }

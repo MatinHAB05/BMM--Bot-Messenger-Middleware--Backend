@@ -63,6 +63,7 @@ func New(deps Dependencies, cfg *Config) *gin.Engine {
 	RegisterUserRoutes(v1, deps, cfg)
 	RegisterChatRoutes(v1, deps)
 	RegisterBroadcastRoutes(v1, deps, cfg)
+	RegisterAttachmentRoutes(v1, deps)
 
 	return engine
 }

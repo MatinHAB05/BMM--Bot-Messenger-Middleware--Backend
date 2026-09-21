@@ -97,8 +97,16 @@ type AttachmentListResponse struct {
 // is a plain []byte (not gorm.io/datatypes.JSON) precisely because this
 // is a DTO -- the service maps it to the entity's JSONB column type
 // internally; nothing GORM-specific belongs on this struct.
+//
+// MediaGroupID is the platform's (Telegram/Bale) media_group_id. An album
+// is delivered as SEPARATE updates -- one per file -- that share this ID.
+// When it is set, the service folds every update of the same
+// (ChatID, MediaGroupID) into ONE ChatHistory row (created by the first
+// update to arrive) with one Attachment per file. Leave it empty for
+// ordinary single-message ingestion.
 type IngestMessageWithAttachmentsRequest struct {
 	ChatID            uint                      `json:"chat_id"`
+	MediaGroupID      string                    `json:"media_group_id,omitempty"` //todo : WARNING!
 	PlatformMessageID int64                     `json:"platform_message_id"`
 	SenderID          string                    `json:"sender_id,omitempty"`
 	SenderName        string                    `json:"sender_name,omitempty"`
@@ -138,6 +146,7 @@ type AttachmentService interface {
 
 	GetAttachmentByID(ctx context.Context, id uint) (*AttachmentResponse, error)
 	GetAttachmentsByMessageID(ctx context.Context, chatHistoryID uint) ([]AttachmentResponse, error)
+
 	GetAttachmentsByChatHistoryIDsBatch(ctx context.Context, chatHistoryIDs []uint) (map[uint][]AttachmentResponse, error)
 	GetAttachmentByPlatformFileID(ctx context.Context, platformFileID string) (*AttachmentResponse, error)
 	ListAttachments(ctx context.Context, query AttachmentListQuery) (*AttachmentListResponse, error)
@@ -176,6 +185,11 @@ type AttachmentService interface {
 	// media to storage (e.g. the Telegram ingestion flow) set
 	// StoragePath/ThumbnailStoragePath on each CreateAttachmentRequest
 	// before calling this.
+	//
+	// If req.MediaGroupID is set, updates of the same album are merged:
+	// the first one creates the ChatHistory row and records
+	// (MediaGroupID, ChatID) -> ChatHistoryID in MediaGroupService; every
+	// later one only adds its attachment(s) to that cached ChatHistory.
 	IngestMessageWithAttachments(ctx context.Context, req IngestMessageWithAttachmentsRequest) error
 }
 

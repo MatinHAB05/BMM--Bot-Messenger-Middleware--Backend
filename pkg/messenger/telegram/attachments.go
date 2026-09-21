@@ -54,6 +54,7 @@ func ExtractAttachments(msg *Message) (attachments []Attachment, caption string)
 			FileSize:       int64(largest.FileSize),
 			Width:          largest.Width,
 			Height:         largest.Height,
+			MimeType:       "image/jpeg", // ? : https://stackoverflow.com/questions/59652977/telegram-bot-api-how-to-get-mime-type-of-received-photos
 		}
 		if smallest.FileID != largest.FileID {
 			att.ThumbnailPlatformFileID = smallest.FileID

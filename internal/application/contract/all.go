@@ -12,6 +12,7 @@ type Services struct {
 	ChatService
 	CompanyService
 	OTPService
+	MediaGroupService
 	RBACService
 	SentBaleMsgService
 	UserService
