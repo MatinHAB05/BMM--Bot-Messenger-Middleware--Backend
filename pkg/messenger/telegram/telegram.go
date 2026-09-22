@@ -125,6 +125,69 @@ func (a *Adapter) SendMessage(ctx context.Context, targetID string, content stri
 	return update, nil
 }
 
+// SendAttachment sends a single media attachment (photo, video, voice,
+// document or animation) to targetID, with content used as the caption
+// (may be empty). attachment.Data is uploaded directly to Telegram as
+// multipart file content -- it is read exactly once, so callers fanning
+// the same attachment out to multiple targets must pass a fresh reader
+// per call (see messenger.Attachment's doc comment).
+func (a *Adapter) SendAttachment(ctx context.Context, targetID string, content string, attachment messenger.Attachment) (*messenger.MessageUpdate, error) {
+	file := &models.InputFileUpload{
+		Filename: attachment.FileName,
+		Data:     attachment.Data,
+	}
+
+	var (
+		mes *models.Message
+		err error
+	)
+
+	switch attachment.Type {
+	case messenger.AttachmentPhoto:
+		mes, err = a.bot.SendPhoto(ctx, &tgbot.SendPhotoParams{
+			ChatID:  ChatID(targetID),
+			Photo:   file,
+			Caption: content,
+		})
+	case messenger.AttachmentVideo:
+		mes, err = a.bot.SendVideo(ctx, &tgbot.SendVideoParams{
+			ChatID:  ChatID(targetID),
+			Video:   file,
+			Caption: content,
+		})
+	case messenger.AttachmentVoice:
+		mes, err = a.bot.SendVoice(ctx, &tgbot.SendVoiceParams{
+			ChatID:  ChatID(targetID),
+			Voice:   file,
+			Caption: content,
+		})
+	case messenger.AttachmentDocument:
+		mes, err = a.bot.SendDocument(ctx, &tgbot.SendDocumentParams{
+			ChatID:   ChatID(targetID),
+			Document: file,
+			Caption:  content,
+		})
+	case messenger.AttachmentAnimation:
+		mes, err = a.bot.SendAnimation(ctx, &tgbot.SendAnimationParams{
+			ChatID:    ChatID(targetID),
+			Animation: file,
+			Caption:   content,
+		})
+	default:
+		return nil, fmt.Errorf("telegram: unsupported attachment type %q for %q", attachment.Type, targetID)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("telegram: send %s to %q: %w", attachment.Type, targetID, err)
+	}
+
+	update, err := toMessageUpdate(mes)
+	if err != nil {
+		return nil, fmt.Errorf("telegram: convert sent message %d: %w", mes.ID, err)
+	}
+	return update, nil
+}
+
 func (a *Adapter) EditMessageText(ctx context.Context, targetID string, msgID int, content string) (*messenger.MessageUpdate, error) {
 	mes, err := a.bot.EditMessageText(ctx, &tgbot.EditMessageTextParams{
 		ChatID:    targetID,

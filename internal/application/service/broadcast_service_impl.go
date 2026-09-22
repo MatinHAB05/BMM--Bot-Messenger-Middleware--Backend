@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sync"
@@ -87,6 +88,25 @@ func (s *broadcastService) validatePlatforms(platforms []string) error {
 	return nil
 }
 
+// validateBroadcastAttachment defends the service against callers other
+// than BroadcastHandler (which already validates type/size on the way
+// in) -- e.g. anything invoking BroadcastService directly.
+func validateBroadcastAttachment(a service_contract.BroadcastAttachment) error {
+	switch a.Type {
+	case service_contract.BroadcastAttachmentPhoto,
+		service_contract.BroadcastAttachmentVideo,
+		service_contract.BroadcastAttachmentVoice,
+		service_contract.BroadcastAttachmentDocument,
+		service_contract.BroadcastAttachmentAnimation:
+	default:
+		return fmt.Errorf("unsupported attachment type %q", a.Type)
+	}
+	if len(a.Data) == 0 {
+		return fmt.Errorf("attachment data is empty")
+	}
+	return nil
+}
+
 func (s *broadcastService) runJobs(
 	ctx context.Context,
 	platformChats map[string][]entity.Chat,
@@ -167,6 +187,14 @@ func (s *broadcastService) Broadcast(ctx context.Context, companyID uint, req se
 	if len(req.Platforms) == 0 {
 		return nil, exception.Wrap(exception.ErrInternal, fmt.Errorf("no platforms specified"))
 	}
+	if req.Message == "" && req.Attachment == nil {
+		return nil, exception.Wrap(exception.ErrInternal, fmt.Errorf("message or attachment is required"))
+	}
+	if req.Attachment != nil {
+		if err := validateBroadcastAttachment(*req.Attachment); err != nil {
+			return nil, exception.Wrap(exception.ErrInternal, err)
+		}
+	}
 
 	if err := s.validatePlatforms(req.Platforms); err != nil {
 		return nil, err
@@ -184,7 +212,25 @@ func (s *broadcastService) Broadcast(ctx context.Context, companyID uint, req se
 		client := s.clients[job.platform]
 		target := targetFromChat(job.chat)
 
-		mes, err := client.SendMessage(ctx, job.chat.PlatformChatID, req.Message)
+		var (
+			mes *messenger.MessageUpdate
+			err error
+		)
+
+		if req.Attachment != nil {
+			// Every job in this broadcast reads the same buffered bytes
+			// concurrently, and an io.Reader can only be drained once --
+			// so each job gets its own bytes.Reader over req.Attachment.Data
+			// rather than sharing one.
+			mes, err = client.SendAttachment(ctx, job.chat.PlatformChatID, req.Message, messenger.Attachment{
+				Type:     messenger.AttachmentType(req.Attachment.Type),
+				FileName: req.Attachment.FileName,
+				Data:     bytes.NewReader(req.Attachment.Data),
+			})
+		} else {
+			mes, err = client.SendMessage(ctx, job.chat.PlatformChatID, req.Message)
+		}
+
 		if err != nil {
 			s.log.Error(err, "broadcast send failed",
 				logger.String("platform", job.platform),
@@ -221,6 +267,7 @@ func (s *broadcastService) Broadcast(ctx context.Context, companyID uint, req se
 			MessageTimestamp:  mes.Timestamp,
 			IsBroadcast:       true,
 			BroadcastUUID:     &broadcastUUID,
+			// Attachments: , //todo
 		}); err != nil {
 			result.Success = false
 			result.Error = append(result.Error, err.Error())

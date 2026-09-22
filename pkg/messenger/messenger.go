@@ -9,6 +9,7 @@ package messenger
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"time"
 )
 
@@ -17,6 +18,17 @@ type MessengerClient interface {
 	// SendMessage delivers content to targetID (a chat/channel/group id,
 	// or an @username where the platform supports it).
 	SendMessage(ctx context.Context, targetID string, content string) (*MessageUpdate, error)
+
+	// SendAttachment delivers a single media file (photo/video/voice/
+	// document/animation) to targetID, with content used as the caption
+	// (may be empty). Mirrors SendMessage's return shape/error handling.
+	//
+	// attachment.Data is read exactly once by the implementation -- a
+	// caller that sends the same attachment to several targets (e.g. a
+	// broadcast fan-out) must give each call its own reader over the same
+	// underlying bytes (e.g. a fresh bytes.NewReader per call).
+	SendAttachment(ctx context.Context, targetID string, content string, attachment Attachment) (*MessageUpdate, error)
+
 	DeleteMessage(ctx context.Context, targetID string, msgID int) error
 	EditMessageText(ctx context.Context, targetID string, msgID int, content string) (*MessageUpdate, error)
 
@@ -24,6 +36,27 @@ type MessengerClient interface {
 	// API (request payloads, log fields, DB rows) to refer to this engine,
 	// e.g. "telegram" or "bale".
 	Platform() string
+}
+
+// AttachmentType enumerates the media kinds SendAttachment accepts. Kept
+// deliberately narrow to what Telegram/Bale both expose distinct "send"
+// methods for.
+type AttachmentType string
+
+const (
+	AttachmentPhoto     AttachmentType = "photo"
+	AttachmentVideo     AttachmentType = "video"
+	AttachmentVoice     AttachmentType = "voice"
+	AttachmentDocument  AttachmentType = "document"
+	AttachmentAnimation AttachmentType = "animation"
+)
+
+// Attachment is a single media file to send alongside (or instead of) a
+// text message.
+type Attachment struct {
+	Type     AttachmentType
+	FileName string
+	Data     io.Reader
 }
 
 type MessageUpdate struct {
