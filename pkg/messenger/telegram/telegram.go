@@ -130,7 +130,9 @@ func (a *Adapter) SendMessage(ctx context.Context, targetID string, content stri
 // (may be empty). attachment.Data is uploaded directly to Telegram as
 // multipart file content -- it is read exactly once, so callers fanning
 // the same attachment out to multiple targets must pass a fresh reader
-// per call (see messenger.Attachment's doc comment).
+// per call (see messenger.Attachment's doc comment). Sending several
+// files is done by calling this once per file -- see
+// broadcastService.sendAttachmentBroadcastJob.
 func (a *Adapter) SendAttachment(ctx context.Context, targetID string, content string, attachment messenger.Attachment) (*messenger.MessageUpdate, error) {
 	file := &models.InputFileUpload{
 		Filename: attachment.FileName,
@@ -141,6 +143,8 @@ func (a *Adapter) SendAttachment(ctx context.Context, targetID string, content s
 		mes *models.Message
 		err error
 	)
+	// ? we have a.bot.SendMediaGroup func : https://core.telegram.org/bots/api#sendmediagroup
+	// but it has some disadvantages : no caption  , you are not free to create groups of any type of files(for exm : it seem to cant send photo and audios in a group)
 
 	switch attachment.Type {
 	case messenger.AttachmentPhoto:
@@ -153,6 +157,12 @@ func (a *Adapter) SendAttachment(ctx context.Context, targetID string, content s
 		mes, err = a.bot.SendVideo(ctx, &tgbot.SendVideoParams{
 			ChatID:  ChatID(targetID),
 			Video:   file,
+			Caption: content,
+		})
+	case messenger.AttachmentAudio:
+		mes, err = a.bot.SendAudio(ctx, &tgbot.SendAudioParams{
+			ChatID:  ChatID(targetID),
+			Audio:   file,
 			Caption: content,
 		})
 	case messenger.AttachmentVoice:
@@ -243,7 +253,79 @@ func toMessageUpdate(mes *models.Message) (*messenger.MessageUpdate, error) {
 		ReplyToMessageID:  replyToMessageID(mes),
 		Timestamp:         time.Unix(int64(mes.Date), 0).UTC(),
 		RawPayload:        raw,
+		Attachment:        attachmentMetaFromMessage(mes),
 	}, nil
+}
+
+// attachmentMetaFromMessage extracts platform file metadata from
+// whichever media field the message carries -- nil for a plain text
+// message. Mirrors MessageMediaType's switch so both stay in sync about
+// what counts as "the" media on a message.
+func attachmentMetaFromMessage(mes *models.Message) *messenger.AttachmentMeta {
+	switch {
+	case len(mes.Photo) > 0:
+		// Telegram returns every generated size of the same photo,
+		// smallest first -- the last entry is the highest resolution.
+		largest := mes.Photo[len(mes.Photo)-1]
+		return &messenger.AttachmentMeta{
+			PlatformFileID: largest.FileID,
+			FileSize:       int64(largest.FileSize),
+			Width:          largest.Width,
+			Height:         largest.Height,
+		}
+	case mes.Video != nil:
+		v := mes.Video
+		meta := &messenger.AttachmentMeta{
+			PlatformFileID: v.FileID,
+			FileName:       v.FileName,
+			MimeType:       v.MimeType,
+			FileSize:       int64(v.FileSize),
+			Width:          v.Width,
+			Height:         v.Height,
+			Duration:       v.Duration,
+		}
+		if v.Thumbnail != nil {
+			meta.ThumbnailPlatformFileID = v.Thumbnail.FileID
+		}
+		return meta
+	case mes.Voice != nil:
+		vo := mes.Voice
+		return &messenger.AttachmentMeta{
+			PlatformFileID: vo.FileID,
+			MimeType:       vo.MimeType,
+			FileSize:       int64(vo.FileSize),
+			Duration:       vo.Duration,
+		}
+	case mes.Document != nil:
+		d := mes.Document
+		meta := &messenger.AttachmentMeta{
+			PlatformFileID: d.FileID,
+			FileName:       d.FileName,
+			MimeType:       d.MimeType,
+			FileSize:       int64(d.FileSize),
+		}
+		if d.Thumbnail != nil {
+			meta.ThumbnailPlatformFileID = d.Thumbnail.FileID
+		}
+		return meta
+	case mes.Animation != nil:
+		an := mes.Animation
+		meta := &messenger.AttachmentMeta{
+			PlatformFileID: an.FileID,
+			FileName:       an.FileName,
+			MimeType:       an.MimeType,
+			FileSize:       int64(an.FileSize),
+			Width:          an.Width,
+			Height:         an.Height,
+			Duration:       an.Duration,
+		}
+		if an.Thumbnail != nil {
+			meta.ThumbnailPlatformFileID = an.Thumbnail.FileID
+		}
+		return meta
+	default:
+		return nil
+	}
 }
 
 // replyToMessageID extracts the ID of the message being replied to, if any.

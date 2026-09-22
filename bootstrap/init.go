@@ -312,9 +312,10 @@ func Init(ctx context.Context) (*App, error) {
 		clients,
 		chatRepo,
 		chatHisRepo,
-		sentbalemsgService,
+		baleDeps,
+		s3Repo,
 		log,
-		newBroadcastServiceConfig(),
+		newBroadcastServiceConfig(env),
 		broadcastPool,
 	)
 
@@ -480,9 +481,10 @@ func newMediaGroupServiceConfig() appservice.MediaGroupServiceConfig {
 	}
 }
 
-func newBroadcastServiceConfig() appservice.BroadcastConfig {
+func newBroadcastServiceConfig(env *Environment) appservice.BroadcastConfig {
 	return appservice.BroadcastConfig{
 		JobTimeout: 0,
+		AttachmentBucket: env.S3.Bucket,
 	}
 }
 

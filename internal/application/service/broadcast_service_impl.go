@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,6 +23,10 @@ import (
 // todo : mq :)
 type BroadcastConfig struct {
 	JobTimeout time.Duration
+	// AttachmentBucket is the object storage (MinIO/S3) bucket broadcast
+	// attachments are uploaded to before being sent to each platform.
+	// Required whenever a Broadcast request includes an attachment.
+	AttachmentBucket string
 }
 
 type BroadcastTarget struct {
@@ -41,11 +46,25 @@ type jobResult struct {
 	target service_contract.BroadcastTarget
 }
 
+// preparedAttachmentFile is one broadcast attachment file after it has
+// been uploaded to object storage: storagePath is the resulting bucket
+// key, and data is kept around (in addition to being in storage) so it
+// can be re-read for every target chat/platform without re-downloading
+// it from MinIO per send.
+type preparedAttachmentFile struct {
+	fileName    string
+	contentType string
+	size        int64
+	storagePath string
+	data        []byte
+}
+
 type broadcastService struct {
 	clients            map[string]messenger.MessengerClient
 	chatRepo           repository_contract.ChatRepository
 	chatHisRepo        repository_contract.ChatHistoryRepository
 	sentbalemsgService service_contract.SentBaleMsgService
+	storageRepo        repository_contract.StorageRepository
 	log                logger.Logger
 	cfg                BroadcastConfig
 	pool               *ants.Pool
@@ -56,6 +75,7 @@ func NewBroadcastService(
 	chatRepo repository_contract.ChatRepository,
 	chatHisRepo repository_contract.ChatHistoryRepository,
 	sentbalemsgService service_contract.SentBaleMsgService,
+	storageRepo repository_contract.StorageRepository,
 	log logger.Logger,
 	cfg BroadcastConfig,
 	pool *ants.Pool,
@@ -70,6 +90,7 @@ func NewBroadcastService(
 		chatRepo:           chatRepo,
 		chatHisRepo:        chatHisRepo,
 		sentbalemsgService: sentbalemsgService,
+		storageRepo:        storageRepo,
 		log:                log.With(logger.String("component", "broadcast_service")),
 		cfg:                cfg,
 		pool:               pool,
@@ -89,22 +110,73 @@ func (s *broadcastService) validatePlatforms(platforms []string) error {
 }
 
 // validateBroadcastAttachment defends the service against callers other
-// than BroadcastHandler (which already validates type/size on the way
-// in) -- e.g. anything invoking BroadcastService directly.
+// than BroadcastHandler (which already validates type/size/count on the
+// way in) -- e.g. anything invoking BroadcastService directly.
 func validateBroadcastAttachment(a service_contract.BroadcastAttachment) error {
 	switch a.Type {
 	case service_contract.BroadcastAttachmentPhoto,
 		service_contract.BroadcastAttachmentVideo,
 		service_contract.BroadcastAttachmentVoice,
+		service_contract.BroadcastAttachmentAudio,
 		service_contract.BroadcastAttachmentDocument,
 		service_contract.BroadcastAttachmentAnimation:
 	default:
 		return fmt.Errorf("unsupported attachment type %q", a.Type)
 	}
-	if len(a.Data) == 0 {
-		return fmt.Errorf("attachment data is empty")
+	if len(a.Files) == 0 {
+		return fmt.Errorf("attachment must include at least one file")
+	}
+	for _, f := range a.Files {
+		if len(f.Data) == 0 {
+			return fmt.Errorf("attachment %q has no data", f.FileName)
+		}
 	}
 	return nil
+}
+
+// sanitizeObjectKeySegment keeps a user-supplied file name from breaking
+// the "/"-delimited object key it's embedded in.
+func sanitizeObjectKeySegment(name string) string {
+	name = strings.ReplaceAll(name, "/", "_")
+	name = strings.ReplaceAll(name, "\\", "_")
+	if name == "" {
+		return "file"
+	}
+	return name
+}
+
+// uploadBroadcastAttachments persists every file in a broadcast's
+// attachment batch to object storage once (not once per target chat --
+// the bytes are identical for every send), keyed under the broadcast's
+// own UUID so re-running/inspecting a specific broadcast's files later is
+// straightforward.
+func (s *broadcastService) uploadBroadcastAttachments(ctx context.Context, broadcastUUID uuid.UUID, files []service_contract.BroadcastAttachmentFile) ([]preparedAttachmentFile, error) {
+	payloads := make([]repository_contract.FileUploadPayload, len(files))
+	prepared := make([]preparedAttachmentFile, len(files))
+
+	for i, f := range files {
+		objectKey := fmt.Sprintf("broadcasts/%s/%d-%s", broadcastUUID, i, sanitizeObjectKeySegment(f.FileName))
+
+		payloads[i] = repository_contract.FileUploadPayload{
+			ObjectKey:   objectKey,
+			Reader:      bytes.NewReader(f.Data),
+			Size:        int64(len(f.Data)),
+			ContentType: f.ContentType,
+		}
+		prepared[i] = preparedAttachmentFile{
+			fileName:    f.FileName,
+			contentType: f.ContentType,
+			size:        int64(len(f.Data)),
+			storagePath: objectKey,
+			data:        f.Data,
+		}
+	}
+
+	if _, err := s.storageRepo.UploadFilesBatch(ctx, s.cfg.AttachmentBucket, payloads); err != nil {
+		return nil, fmt.Errorf("upload broadcast attachments: %w", err)
+	}
+
+	return prepared, nil
 }
 
 func (s *broadcastService) runJobs(
@@ -191,6 +263,9 @@ func (s *broadcastService) Broadcast(ctx context.Context, companyID uint, req se
 		return nil, exception.Wrap(exception.ErrInternal, fmt.Errorf("message or attachment is required"))
 	}
 	if req.Attachment != nil {
+		if s.storageRepo == nil || s.cfg.AttachmentBucket == "" {
+			return nil, exception.Wrap(exception.ErrInternal, fmt.Errorf("broadcast attachment storage is not configured"))
+		}
 		if err := validateBroadcastAttachment(*req.Attachment); err != nil {
 			return nil, exception.Wrap(exception.ErrInternal, err)
 		}
@@ -208,55 +283,148 @@ func (s *broadcastService) Broadcast(ctx context.Context, companyID uint, req se
 	// ? we can use v7 (after enabale pool random) but we are fine for now
 	broadcastUUID := uuid.New()
 
-	handle := func(ctx context.Context, job broadcastJob) jobResult {
-		client := s.clients[job.platform]
-		target := targetFromChat(job.chat)
-
-		var (
-			mes *messenger.MessageUpdate
-			err error
-		)
-
-		if req.Attachment != nil {
-			// Every job in this broadcast reads the same buffered bytes
-			// concurrently, and an io.Reader can only be drained once --
-			// so each job gets its own bytes.Reader over req.Attachment.Data
-			// rather than sharing one.
-			mes, err = client.SendAttachment(ctx, job.chat.PlatformChatID, req.Message, messenger.Attachment{
-				Type:     messenger.AttachmentType(req.Attachment.Type),
-				FileName: req.Attachment.FileName,
-				Data:     bytes.NewReader(req.Attachment.Data),
-			})
-		} else {
-			mes, err = client.SendMessage(ctx, job.chat.PlatformChatID, req.Message)
-		}
-
+	// Attachments are uploaded to object storage exactly once here, ahead
+	// of the fan-out below -- every target chat/platform reuses the same
+	// storagePath and buffered bytes rather than each job re-uploading.
+	var preparedFiles []preparedAttachmentFile
+	if req.Attachment != nil {
+		preparedFiles, err = s.uploadBroadcastAttachments(ctx, broadcastUUID, req.Attachment.Files)
 		if err != nil {
-			s.log.Error(err, "broadcast send failed",
-				logger.String("platform", job.platform),
-				logger.String("target_id", job.chat.PlatformChatID),
-			)
-			return jobResult{
-				result: service_contract.BroadcastResult{
-					Platform: job.platform,
-					Success:  false,
-					Error:    []string{err.Error()},
-				},
-				target: target,
-			}
+			return nil, exception.Wrap(exception.ErrInternal, err)
 		}
+	}
 
-		s.log.Info("broadcast delivered",
+	handle := func(ctx context.Context, job broadcastJob) jobResult {
+		target := targetFromChat(job.chat)
+		if req.Attachment == nil {
+			return s.sendTextBroadcastJob(ctx, job, target, req.Message, broadcastUUID)
+		}
+		return s.sendAttachmentBroadcastJob(ctx, job, target, req.Message, req.Attachment.Type, preparedFiles, broadcastUUID)
+	}
+
+	results, targets := s.runJobs(ctx, platformChats, handle)
+
+	return &service_contract.BroadcastResponse{
+		Results: results,
+		Targets: targets,
+	}, nil
+}
+
+// sendTextBroadcastJob delivers a plain text message to one target chat.
+// This is exactly Broadcast's original (pre-attachment) per-job body,
+// factored out unchanged so text-only broadcasts behave identically to
+// before.
+func (s *broadcastService) sendTextBroadcastJob(ctx context.Context, job broadcastJob, target service_contract.BroadcastTarget, message string, broadcastUUID uuid.UUID) jobResult {
+	client := s.clients[job.platform]
+
+	mes, err := client.SendMessage(ctx, job.chat.PlatformChatID, message)
+	if err != nil {
+		s.log.Error(err, "broadcast send failed",
 			logger.String("platform", job.platform),
 			logger.String("target_id", job.chat.PlatformChatID),
 		)
+		return jobResult{
+			result: service_contract.BroadcastResult{
+				Platform: job.platform,
+				Success:  false,
+				Error:    []string{err.Error()},
+			},
+			target: target,
+		}
+	}
 
-		result := service_contract.BroadcastResult{
-			Platform: job.platform,
-			Success:  true,
+	s.log.Info("broadcast delivered",
+		logger.String("platform", job.platform),
+		logger.String("target_id", job.chat.PlatformChatID),
+	)
+
+	result := service_contract.BroadcastResult{
+		Platform: job.platform,
+		Success:  true,
+	}
+
+	if err := s.chatHisRepo.Create(ctx, &entity.ChatHistory{
+		ChatID:            job.chat.ID,
+		PlatformMessageID: mes.PlatformMessageID,
+		SenderID:          mes.SenderID,
+		SenderName:        mes.SenderName,
+		Content:           mes.Content,
+		MediaType:         mes.MediaType,
+		RawPayload:        datatypes.JSON(mes.RawPayload),
+		MessageTimestamp:  mes.Timestamp,
+		IsBroadcast:       true,
+		BroadcastUUID:     &broadcastUUID,
+	}); err != nil {
+		result.Success = false
+		result.Error = append(result.Error, err.Error())
+		s.log.Error(err, "broadcast history persist failed",
+			logger.String("platform", job.platform),
+			logger.String("target_id", job.chat.PlatformChatID),
+		)
+		s.log.Warn("message delivered but history not persisted; retry/reconciliation needed",
+			logger.String("platform", job.platform),
+			logger.String("target_id", job.chat.PlatformChatID),
+		)
+	}
+
+	if err := s.sentbalemsgService.SetSentBaleMsg(ctx, job.chat.PlatformChatID, message); err != nil { // ? : FUCK BALE!
+		result.Success = false
+		result.Error = append(result.Error, err.Error())
+	}
+
+	return jobResult{result: result, target: target}
+}
+
+// sendAttachmentBroadcastJob delivers every file in the attachment batch
+// (all the same type: N photos, N videos, ...) to one target chat, one
+// platform Send call per file, and persists one ChatHistory row per file
+// -- with its Attachment relation populated so it shows up as a real
+// attachment on that message, not just a media_type label.
+//
+// Only the first file carries the caption (req.Message); the rest are
+// sent without one, matching how a Telegram/Bale album shows a single
+// caption rather than repeating it under every item.
+func (s *broadcastService) sendAttachmentBroadcastJob(
+	ctx context.Context,
+	job broadcastJob,
+	target service_contract.BroadcastTarget,
+	caption string,
+	attachmentType service_contract.BroadcastAttachmentType,
+	files []preparedAttachmentFile,
+	broadcastUUID uuid.UUID,
+) jobResult {
+	client := s.clients[job.platform]
+	result := service_contract.BroadcastResult{Platform: job.platform, Success: true}
+
+	for i, f := range files {
+		fileCaption := ""
+		if i == 0 {
+			fileCaption = caption
 		}
 
-		if err := s.chatHisRepo.Create(ctx, &entity.ChatHistory{
+		mes, err := client.SendAttachment(ctx, job.chat.PlatformChatID, fileCaption, messenger.Attachment{
+			Type:     messenger.AttachmentType(attachmentType),
+			FileName: f.fileName,
+			Data:     bytes.NewReader(f.data), // fresh reader: every job/file reads the same buffered bytes independently
+		})
+		if err != nil {
+			s.log.Error(err, "broadcast attachment send failed",
+				logger.String("platform", job.platform),
+				logger.String("target_id", job.chat.PlatformChatID),
+				logger.String("file", f.fileName),
+			)
+			result.Success = false
+			result.Error = append(result.Error, fmt.Sprintf("%s: %s", f.fileName, err.Error()))
+			continue
+		}
+
+		s.log.Info("broadcast attachment delivered",
+			logger.String("platform", job.platform),
+			logger.String("target_id", job.chat.PlatformChatID),
+			logger.String("file", f.fileName),
+		)
+
+		history := &entity.ChatHistory{
 			ChatID:            job.chat.ID,
 			PlatformMessageID: mes.PlatformMessageID,
 			SenderID:          mes.SenderID,
@@ -267,34 +435,51 @@ func (s *broadcastService) Broadcast(ctx context.Context, companyID uint, req se
 			MessageTimestamp:  mes.Timestamp,
 			IsBroadcast:       true,
 			BroadcastUUID:     &broadcastUUID,
-			// Attachments: , //todo
-		}); err != nil {
+		}
+
+		// Passing Attachments here (rather than persisting them
+		// separately) lets gorm's default associations-on-create behavior
+		// insert the attachments row wired to this exact ChatHistory via
+		// its foreignKey -- no second write needed.
+		if mes.Attachment != nil {
+			history.Attachments = []entity.Attachment{
+				{
+					PlatformFileID:          mes.Attachment.PlatformFileID,
+					FileType:                entity.AttachmentFileType(attachmentType),
+					FileName:                f.fileName,
+					MimeType:                f.contentType,
+					FileSize:                f.size,
+					ThumbnailPlatformFileID: mes.Attachment.ThumbnailPlatformFileID,
+					StoragePath:             f.storagePath,
+					Width:                   mes.Attachment.Width,
+					Height:                  mes.Attachment.Height,
+					Duration:                mes.Attachment.Duration,
+				},
+			}
+		}
+
+		if err := s.chatHisRepo.Create(ctx, history); err != nil {
 			result.Success = false
-			result.Error = append(result.Error, err.Error())
+			result.Error = append(result.Error, fmt.Sprintf("%s: %s", f.fileName, err.Error()))
 			s.log.Error(err, "broadcast history persist failed",
 				logger.String("platform", job.platform),
 				logger.String("target_id", job.chat.PlatformChatID),
+				logger.String("file", f.fileName),
 			)
-			s.log.Warn("message delivered but history not persisted; retry/reconciliation needed",
+			s.log.Warn("attachment delivered but history not persisted; retry/reconciliation needed",
 				logger.String("platform", job.platform),
 				logger.String("target_id", job.chat.PlatformChatID),
+				logger.String("file", f.fileName),
 			)
 		}
-
-		err = s.sentbalemsgService.SetSentBaleMsg(ctx, job.chat.PlatformChatID, req.Message) // ? : FUCK BALE!
-		if err != nil {
-			result.Success = false
-			result.Error = append(result.Error, err.Error())
-		}
-		return jobResult{result: result, target: target}
 	}
 
-	results, targets := s.runJobs(ctx, platformChats, handle)
+	if err := s.sentbalemsgService.SetSentBaleMsg(ctx, job.chat.PlatformChatID, caption); err != nil { // ? : FUCK BALE!
+		result.Success = false
+		result.Error = append(result.Error, err.Error())
+	}
 
-	return &service_contract.BroadcastResponse{
-		Results: results,
-		Targets: targets,
-	}, nil
+	return jobResult{result: result, target: target}
 }
 
 func (s *broadcastService) DeleteBroadcast(ctx context.Context, companyID uint, broadcastMsgUUID uuid.UUID, req service_contract.DeleteBroadcastRequest) error {

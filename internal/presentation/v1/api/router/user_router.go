@@ -6,11 +6,7 @@ import (
 	apimiddleware "messenger-backend/internal/presentation/middleware/api"
 )
 
-// RegisterUserRoutes wires /api/v1/users*. Every route requires a valid
-// access token and passes through Casbin; the seeded policy set (see
-// internal/infrastructure/seed) further restricts list/create/update/
-// update-roles/delete to the "admin" role while "me" is open to any
-// authenticated role. Every handler scopes to the caller's own company.
+// RegisterUserRoutes  /api/v1/users*
 func RegisterUserRoutes(v1 *gin.RouterGroup, deps Dependencies, cfg *Config) {
 	users := v1.Group("/users")
 	users.Use(apimiddleware.Auth(deps.TokenMaker, deps.AuthnTokenRepository, deps.Logger))

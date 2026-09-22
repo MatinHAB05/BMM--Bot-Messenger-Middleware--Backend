@@ -6,11 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterCompanyRoutes wires /api/v1/companies/*. All three require a
-// valid token and pass through Casbin; the seeded policy set restricts
-// update/delete to the "admin" role, and the service layer additionally
-// rejects any :id that isn't the caller's own company (see
-// CompanyService.Update/Delete) -- there is no cross-company access.
+// RegisterCompanyRoutes  /api/v1/companies/*
 func RegisterCompanyRoutes(v1 *gin.RouterGroup, deps Dependencies) {
 	v1.POST("/companies", deps.CompanyHandler.Create)
 

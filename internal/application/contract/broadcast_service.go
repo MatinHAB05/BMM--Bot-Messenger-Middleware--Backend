@@ -18,22 +18,33 @@ const (
 	BroadcastAttachmentVoice     BroadcastAttachmentType = "voice"
 	BroadcastAttachmentDocument  BroadcastAttachmentType = "document"
 	BroadcastAttachmentAnimation BroadcastAttachmentType = "animation"
+	BroadcastAttachmentAudio     BroadcastAttachmentType = "audio"
 )
 
-// BroadcastAttachment is the media file a caller attaches to a Broadcast
-// request. Data is fully buffered (not streamed): Broadcast fans the same
-// attachment out to every target chat concurrently, and each target needs
-// an independent read over the same bytes.
+// BroadcastAttachmentFile is a single uploaded file within a broadcast's
+// attachment batch.
+type BroadcastAttachmentFile struct {
+	FileName    string
+	ContentType string
+	Data        []byte
+}
+
+// BroadcastAttachment is the attachment batch a caller adds to a
+// Broadcast request: one Type shared by every file in Files (e.g. 5
+// photos, or 3 videos -- never a mix of photo+video in one request).
+// Each file's Data is fully buffered (not streamed): Broadcast fans the
+// same files out to every target chat concurrently, and each target
+// needs an independent read over the same bytes.
 type BroadcastAttachment struct {
-	Type     BroadcastAttachmentType
-	FileName string
-	Data     []byte
+	Type  BroadcastAttachmentType
+	Files []BroadcastAttachmentFile
 }
 
 type BroadcastRequest struct {
-	// Message is the text to send, or the caption when Attachment is set.
-	// At least one of Message/Attachment must be present -- enforced by
-	// the handler/service, not by a binding tag, since Attachment never
+	// Message is the text to send, or the caption (applied to the first
+	// file only when Attachment has several) when Attachment is set. At
+	// least one of Message/Attachment must be present -- enforced by the
+	// handler/service, not by a binding tag, since Attachment never
 	// arrives via JSON binding (see BroadcastHandler.Send).
 	Message   string   `json:"message" form:"message"`
 	Platforms []string `json:"platforms" form:"platforms" binding:"required"`

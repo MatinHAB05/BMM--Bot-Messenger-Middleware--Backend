@@ -22,6 +22,9 @@ type MessengerClient interface {
 	// SendAttachment delivers a single media file (photo/video/voice/
 	// document/animation) to targetID, with content used as the caption
 	// (may be empty). Mirrors SendMessage's return shape/error handling.
+	// Sending several files (e.g. 5 photos) means calling this once per
+	// file -- that fan-out is the caller's job (see broadcastService),
+	// not this method's.
 	//
 	// attachment.Data is read exactly once by the implementation -- a
 	// caller that sends the same attachment to several targets (e.g. a
@@ -47,6 +50,7 @@ const (
 	AttachmentPhoto     AttachmentType = "photo"
 	AttachmentVideo     AttachmentType = "video"
 	AttachmentVoice     AttachmentType = "voice"
+	AttachmentAudio     AttachmentType = "audio"
 	AttachmentDocument  AttachmentType = "document"
 	AttachmentAnimation AttachmentType = "animation"
 )
@@ -57,6 +61,23 @@ type Attachment struct {
 	Type     AttachmentType
 	FileName string
 	Data     io.Reader
+}
+
+// AttachmentMeta is the platform-native file metadata a messenger engine
+// reports back after a SendAttachment call -- the pieces
+// entity.Attachment needs (PlatformFileID above all) that a plain
+// MessageUpdate has no other field for. It's nil on a MessageUpdate
+// returned by SendMessage/EditMessageText, since those never carry
+// media.
+type AttachmentMeta struct {
+	PlatformFileID          string
+	ThumbnailPlatformFileID string
+	FileName                string
+	MimeType                string
+	FileSize                int64
+	Width                   int
+	Height                  int
+	Duration                int
 }
 
 type MessageUpdate struct {
@@ -72,4 +93,9 @@ type MessageUpdate struct {
 	ReplyToMessageID  *int64          // set when this message is a reply
 	Timestamp         time.Time       // message send time (edit time is not separately exposed by Bot API here)
 	RawPayload        json.RawMessage // full update JSON, for forensics/replay
+
+	// Attachment carries platform file metadata (file_id, mime type,
+	// dimensions, ...) when this message was sent via SendAttachment; nil
+	// for a plain text SendMessage/EditMessageText result.
+	Attachment *AttachmentMeta
 }

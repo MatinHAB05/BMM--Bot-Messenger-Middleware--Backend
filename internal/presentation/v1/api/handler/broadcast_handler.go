@@ -1,7 +1,6 @@
 package apihandler
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -22,11 +21,17 @@ func NewBroadcastHandler(broadcastService service_contract.BroadcastService) *Br
 	return &BroadcastHandler{broadcastService: broadcastService}
 }
 
-// maxBroadcastAttachmentSize bounds a single broadcast attachment upload.
-// 50MB matches Telegram's own general ceiling for bot-uploaded files;
-// adjust if your Bale integration (or Telegram's per-type limits: e.g.
-// 1MB for a valid .ogg voice note) needs something tighter.
-const maxBroadcastAttachmentSize = 50 << 20
+const (
+	// maxBroadcastAttachmentFileSize bounds a single attachment file.
+	// 50MB matches Telegram's own general ceiling for bot-uploaded files;
+	// tighten it if your Bale integration needs something smaller.
+	maxBroadcastAttachmentFileSize = 50 << 20
+	// maxBroadcastAttachmentFiles bounds how many files one broadcast can
+	// attach at once (all of the same attachment_type). Mirrors
+	// Telegram's own sendMediaGroup cap (2-10 items) as a sane ceiling;
+	// adjust to taste.
+	maxBroadcastAttachmentFiles = 10
+)
 
 // Send handles POST /api/v1/broadcast. The service fans the message out
 // to every requested platform concurrently and only returns once all
@@ -36,13 +41,15 @@ const maxBroadcastAttachmentSize = 50 << 20
 // Two request shapes are accepted:
 //   - application/json: {"message": "...", "platforms": [...]} -- plain
 //     text broadcast, unchanged from before.
-//   - multipart/form-data, when an attachment is included:
-//     message          (optional; used as the caption)
+//   - multipart/form-data, when attachment(s) are included:
+//     message          (optional; used as the caption on the first file)
 //     platforms        (repeat the field once per platform:
 //     platforms=telegram&platforms=bale)
-//     attachment       the file itself
-//     attachment_type  one of photo|video|voice|document|animation
-//     attachment_name  optional; defaults to the uploaded file's name
+//     attachment        the file(s) -- repeat this field for more than
+//     one (e.g. 5 photos); all files in one request
+//     must be the same attachment_type
+//     attachment_type  one of photo|video|voice|document|animation,
+//     applies to every "attachment" file in the request
 func (h *BroadcastHandler) Send(c *gin.Context) {
 	var req service_contract.BroadcastRequest
 
@@ -92,24 +99,26 @@ func isMultipart(c *gin.Context) bool {
 }
 
 // parseBroadcastMultipart builds a BroadcastRequest from a multipart
-// form. The "attachment" field is optional -- its absence just yields a
-// text-only request, same as the JSON path.
+// form. "attachment" is optional and repeatable -- its absence yields a
+// text-only request, same as the JSON path; every repetition is treated
+// as one more file of the single attachment_type given.
 func parseBroadcastMultipart(c *gin.Context) (service_contract.BroadcastRequest, error) {
 	req := service_contract.BroadcastRequest{
 		Message:   c.PostForm("message"),
 		Platforms: c.PostFormArray("platforms"),
 	}
 
-	fileHeader, err := c.FormFile("attachment")
+	form, err := c.MultipartForm()
 	if err != nil {
-		if errors.Is(err, http.ErrMissingFile) {
-			return req, nil
-		}
-		return req, fmt.Errorf("read attachment: %w", err)
+		return req, fmt.Errorf("parse multipart form: %w", err)
 	}
 
-	if fileHeader.Size > maxBroadcastAttachmentSize {
-		return req, fmt.Errorf("attachment exceeds %d bytes", maxBroadcastAttachmentSize)
+	fileHeaders := form.File["attachment"]
+	if len(fileHeaders) == 0 {
+		return req, nil
+	}
+	if len(fileHeaders) > maxBroadcastAttachmentFiles {
+		return req, fmt.Errorf("at most %d attachment files are allowed per broadcast, got %d", maxBroadcastAttachmentFiles, len(fileHeaders))
 	}
 
 	attachmentType := service_contract.BroadcastAttachmentType(c.PostForm("attachment_type"))
@@ -117,32 +126,39 @@ func parseBroadcastMultipart(c *gin.Context) (service_contract.BroadcastRequest,
 	case service_contract.BroadcastAttachmentPhoto,
 		service_contract.BroadcastAttachmentVideo,
 		service_contract.BroadcastAttachmentVoice,
+		service_contract.BroadcastAttachmentAudio,
 		service_contract.BroadcastAttachmentDocument,
 		service_contract.BroadcastAttachmentAnimation:
 	default:
 		return req, fmt.Errorf("attachment_type must be one of photo|video|voice|document|animation, got %q", attachmentType)
 	}
 
-	f, err := fileHeader.Open()
-	if err != nil {
-		return req, fmt.Errorf("open attachment: %w", err)
-	}
-	defer f.Close()
+	files := make([]service_contract.BroadcastAttachmentFile, 0, len(fileHeaders))
+	for _, fh := range fileHeaders {
+		if fh.Size > maxBroadcastAttachmentFileSize {
+			return req, fmt.Errorf("attachment %q exceeds %d bytes", fh.Filename, maxBroadcastAttachmentFileSize)
+		}
 
-	data, err := io.ReadAll(f)
-	if err != nil {
-		return req, fmt.Errorf("read attachment bytes: %w", err)
-	}
+		f, err := fh.Open()
+		if err != nil {
+			return req, fmt.Errorf("open attachment %q: %w", fh.Filename, err)
+		}
+		data, readErr := io.ReadAll(f)
+		f.Close()
+		if readErr != nil {
+			return req, fmt.Errorf("read attachment %q: %w", fh.Filename, readErr)
+		}
 
-	fileName := c.PostForm("attachment_name")
-	if fileName == "" {
-		fileName = fileHeader.Filename
+		files = append(files, service_contract.BroadcastAttachmentFile{
+			FileName:    fh.Filename,
+			ContentType: fh.Header.Get("Content-Type"),
+			Data:        data,
+		})
 	}
 
 	req.Attachment = &service_contract.BroadcastAttachment{
-		Type:     attachmentType,
-		FileName: fileName,
-		Data:     data,
+		Type:  attachmentType,
+		Files: files,
 	}
 
 	return req, nil

@@ -206,7 +206,7 @@ func (s *authService) RegisterMeWithCompany(ctx context.Context, req service_con
 			return err
 		}
 
-		if err := s.rbacRepo.AddRoleForUser(ctx, strconv.FormatUint(uint64(u.ID), 10), "admin", strconv.FormatUint(uint64(c.ID), 10)); err != nil {
+		if err := s.rbacRepo.AddRoleForUser(ctx, strconv.FormatUint(uint64(u.ID), 10), entity.RoleSuperAdmin, strconv.FormatUint(uint64(c.ID), 10)); err != nil {
 			return err
 		}
 		return nil
@@ -214,7 +214,7 @@ func (s *authService) RegisterMeWithCompany(ctx context.Context, req service_con
 	if err != nil {
 		return nil, nil, err
 	}
-	usr, com := service_contract.ToUserResponse(u, []string{"admin"}), service_contract.ToCompanyResponse(c)
+	usr, com := service_contract.ToUserResponse(u, []string{entity.RoleSuperAdmin}), service_contract.ToCompanyResponse(c)
 	return &usr, &com, nil
 }
 

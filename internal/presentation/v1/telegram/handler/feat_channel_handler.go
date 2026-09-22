@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	service_contract "messenger-backend/internal/application/contract"
 	"messenger-backend/internal/domain/entity"
@@ -50,7 +51,7 @@ func (h *FeatChannelHandler) SetChannelPendingDeepStartChannelCommand(ctx contex
 		ReplyMarkup: models.InlineKeyboardMarkup{
 			InlineKeyboard: [][]models.InlineKeyboardButton{
 				{
-					{Text: "📢 Select & Add Channel", URL: fmt.Sprintf("https://t.me/%s?startchannel&admin=post_messages+edit_messages+delete_messages", h.botUsername)},
+					{Text: "📢 Select & Add Channel", URL: fmt.Sprintf("https://t.me/%s?startchannel&admin=post_messages+edit_messages+delete_messages", strings.TrimPrefix(h.botUsername,"@"))},
 				},
 			},
 		},

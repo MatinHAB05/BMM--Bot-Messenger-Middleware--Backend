@@ -259,7 +259,7 @@ func (r *rbacRepository) GetPermissionsForRole(ctx context.Context, role string,
 		return nil, fmt.Errorf("%w: role and companyID cannot be empty", exception.ErrBadRequest)
 	}
 
-	// Casbin: [["admin", "company-1", "/api/v1/users", "GET"], ...]
+	// Casbin: [["super-admin", "company-1", "/api/v1/users", "GET"], ...]
 	rawPolicies, err := r.enforcer.GetEnforcer().GetFilteredPolicy(0, role, companyID)
 	if err != nil {
 		return nil, exception.ErrRoleSyncFailed

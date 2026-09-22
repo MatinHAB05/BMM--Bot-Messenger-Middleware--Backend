@@ -133,7 +133,7 @@ func seedPolicies(ctx context.Context, companyID, adminID uint, rbacRepo reposit
 		log.Info("seed: policy added", logger.String("role", p.Role), logger.String("object", p.Permission.Endpoint), logger.String("action", p.Permission.Method))
 	}
 
-	if err := rbacRepo.AddRoleForUser(ctx, adminSubject, entity.RoleAdmin, companyDomain); err != nil {
+	if err := rbacRepo.AddRoleForUser(ctx, adminSubject, entity.RoleSuperAdmin, companyDomain); err != nil {
 		return fmt.Errorf("assign admin role: %w", err)
 	}
 	log.Info("seed: admin role assigned", logger.String("user_id", adminSubject), logger.String("company_id", companyDomain))
