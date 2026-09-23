@@ -33,7 +33,7 @@ type MessengerClient interface {
 	SendAttachment(ctx context.Context, targetID string, content string, attachment Attachment) (*MessageUpdate, error)
 
 	DeleteMessage(ctx context.Context, targetID string, msgID int) error
-	EditMessageText(ctx context.Context, targetID string, msgID int, content string) (*MessageUpdate, error)
+	EditMessageText(ctx context.Context, targetID string, msgID int, content string, hasAttachments bool) (*MessageUpdate, error)
 
 	// Platform returns the stable lowercase identifier used throughout the
 	// API (request payloads, log fields, DB rows) to refer to this engine,

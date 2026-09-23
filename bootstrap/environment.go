@@ -45,13 +45,13 @@ type BotConfig struct {
 	BaleBotUsername     string `mapstructure:"BALE_BOT_USERNAME" json:"bale_bot_username"`
 }
 
-type AdminConfig struct {
-	Username    string `mapstructure:"ADMIN_USERNAME" json:"admin_username"`
-	Password    string `mapstructure:"ADMIN_PASSWORD" json:"admin_password"`
-	Email       string `mapstructure:"ADMIN_EMAIL" json:"admin_email"`
-	Phone       string `mapstructure:"ADMIN_PHONE" json:"admin_phone"`
-	CompanyName string `mapstructure:"ADMIN_COMPANY_NAME" json:"admin_company_name"`
-	CompanyCode string `mapstructure:"ADMIN_COMPANY_CODE" json:"admin_company_code"`
+type SuperAdminConfig struct {
+	Username    string `mapstructure:"SUPERADMIN_USERNAME" json:"super_admin_username"`
+	Password    string `mapstructure:"SUPERADMIN_PASSWORD" json:"super_admin_password"`
+	Email       string `mapstructure:"SUPERADMIN_EMAIL" json:"super_admin_email"`
+	Phone       string `mapstructure:"SUPERADMIN_PHONE" json:"super_admin_phone"`
+	CompanyName string `mapstructure:"SUPERADMIN_COMPANY_NAME" json:"super_admin_company_name"`
+	CompanyCode string `mapstructure:"SUPERADMIN_COMPANY_CODE" json:"super_admin_company_code"`
 
 	Chats string ` json:"chats"`
 }
@@ -102,19 +102,19 @@ type S3Config struct {
 }
 
 type Environment struct {
-	App       AppConfig       `mapstructure:",squash" json:"app"`
-	Database  DatabaseConfig  `mapstructure:",squash" json:"database"`
-	Redis     RedisConfig     `mapstructure:",squash" json:"redis"`
-	Auth      AuthConfig      `mapstructure:",squash" json:"auth"`
-	OTP       OTPConfig       `mapstructure:",squash" json:"otp"`
-	Bot       BotConfig       `mapstructure:",squash" json:"bot"`
-	Admin     AdminConfig     `mapstructure:",squash" json:"admin"`
-	RateLimit RateLimitConfig `mapstructure:",squash" json:"rate_limit"`
-	Logger    LoggerConfig    `mapstructure:",squash" json:"logger"`
-	Casbin    CasbinConfig    `mapstructure:",squash" json:"casbin"`
-	Migration MigrationConfig `mapstructure:",squash" json:"migration"`
-	Email     EmailConfig     `mapstructure:",squash" json:"email"`
-	S3        S3Config        `mapstructure:",squash" json:"s3"`
+	App        AppConfig        `mapstructure:",squash" json:"app"`
+	Database   DatabaseConfig   `mapstructure:",squash" json:"database"`
+	Redis      RedisConfig      `mapstructure:",squash" json:"redis"`
+	Auth       AuthConfig       `mapstructure:",squash" json:"auth"`
+	OTP        OTPConfig        `mapstructure:",squash" json:"otp"`
+	Bot        BotConfig        `mapstructure:",squash" json:"bot"`
+	SuperAdmin SuperAdminConfig `mapstructure:",squash" json:"super_admin"`
+	RateLimit  RateLimitConfig  `mapstructure:",squash" json:"rate_limit"`
+	Logger     LoggerConfig     `mapstructure:",squash" json:"logger"`
+	Casbin     CasbinConfig     `mapstructure:",squash" json:"casbin"`
+	Migration  MigrationConfig  `mapstructure:",squash" json:"migration"`
+	Email      EmailConfig      `mapstructure:",squash" json:"email"`
+	S3         S3Config         `mapstructure:",squash" json:"s3"`
 }
 
 func LoadEnvironment() *Environment {
@@ -138,7 +138,7 @@ func LoadEnvironment() *Environment {
 		log.Fatalf("Failed to read-admin-chats: %v", err)
 	}
 	chats := string(rawChats)
-	env.Admin.Chats = chats
+	env.SuperAdmin.Chats = chats
 
 	printConfig(&env)
 

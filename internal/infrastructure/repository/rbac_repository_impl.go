@@ -10,7 +10,7 @@ import (
 	"messenger-backend/internal/infrastructure/rbac"
 )
 
-// todo : rbac trx manager somehow do it
+// TODO : rbac trx manager somehow do it
 type rbacRepository struct {
 	enforcer rbac.RBACEnforcer
 }

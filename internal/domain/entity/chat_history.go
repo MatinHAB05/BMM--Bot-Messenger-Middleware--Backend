@@ -30,8 +30,9 @@ type ChatHistory struct {
 	RawPayload        datatypes.JSON `gorm:"column:raw_payload;type:jsonb" json:"raw_payload,omitempty"`
 	MessageTimestamp  time.Time      `gorm:"column:message_timestamp;index:idx_chat_histories_chat_timestamp,priority:2" json:"message_timestamp"`
 
-	IsBroadcast   bool
-	BroadcastUUID *uuid.UUID `gorm:"column:broadcast_uuid"`
+	IsBroadcast    bool
+	HasAttachments bool
+	BroadcastUUID  *uuid.UUID `gorm:"column:broadcast_uuid"`
 
 	// Attachments holds every media file (and thumbnail reference) tied to
 	// this message. ON DELETE CASCADE at the DB level (see the attachments

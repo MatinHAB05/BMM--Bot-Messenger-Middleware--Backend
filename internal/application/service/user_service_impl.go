@@ -13,7 +13,7 @@ import (
 	"strconv"
 )
 
-//todo : use hasher interface
+//TODO : use hasher interface
 
 // userService implements service_contract.UserService. Every method is scoped to
 // a companyID -- there is no path to read or mutate a user outside the

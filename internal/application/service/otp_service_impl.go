@@ -228,7 +228,7 @@ func (s *otpService) InvalidateOTP(ctx context.Context, identifier string, otpTy
 	return nil
 }
 
-// todo : watch trx
+// TODO : watch trx
 func (s *otpService) InvalidateOTPAndSetVerified(ctx context.Context, identifier string, otpType otp.Type, code string) error {
 	strat, err := s.strategyFor(otpType)
 	if err != nil {

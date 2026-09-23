@@ -198,12 +198,22 @@ func (a *Adapter) SendAttachment(ctx context.Context, targetID string, content s
 	return update, nil
 }
 
-func (a *Adapter) EditMessageText(ctx context.Context, targetID string, msgID int, content string) (*messenger.MessageUpdate, error) {
-	mes, err := a.bot.EditMessageText(ctx, &tgbot.EditMessageTextParams{
-		ChatID:    targetID,
-		MessageID: msgID,
-		Text:      content,
-	})
+func (a *Adapter) EditMessageText(ctx context.Context, targetID string, msgID int, content string, hasAttachments bool) (*messenger.MessageUpdate, error) {
+	var mes *models.Message
+	var err error
+	if hasAttachments {
+		mes, err = a.bot.EditMessageCaption(ctx, &tgbot.EditMessageCaptionParams{
+			ChatID:    targetID,
+			MessageID: msgID,
+			Caption:   content,
+		})
+	} else {
+		mes, err = a.bot.EditMessageText(ctx, &tgbot.EditMessageTextParams{
+			ChatID:    targetID,
+			MessageID: msgID,
+			Text:      content,
+		})
+	}
 	if err != nil {
 		return nil, fmt.Errorf("telegram: update message from chat %q - msgid %d: %w", targetID, msgID, err)
 	}

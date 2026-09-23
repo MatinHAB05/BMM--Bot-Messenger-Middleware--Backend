@@ -33,6 +33,7 @@ type CreateMessageRequest struct {
 	MediaType         string         ` json:"media_type"`
 	RawPayload        datatypes.JSON ` json:"raw_payload,omitempty"`
 	MessageTimestamp  time.Time      ` json:"message_timestamp"`
+	HasAttachments    bool           ` json:"has_attachments"`
 }
 
 type UpdateChatHisRequest struct {
@@ -65,8 +66,9 @@ type ChatHistoryResponse struct {
 	MessageTimestamp  string `json:"message_timestamp"`
 	CreatedAt         string `json:"created_at"`
 
-	IsBroadcast   bool
-	BroadcastUUID *uuid.UUID
+	IsBroadcast    bool
+	BroadcastUUID  *uuid.UUID
+	HasAttachments bool
 }
 
 // ChatHistoryDetailResponse is returned by GET .../history/:message_id.
@@ -103,6 +105,7 @@ type IngestedUpdate struct {
 	MediaType         string
 	RawPayload        []byte
 	MessageTimestamp  time.Time
+	HasAttachments    bool
 }
 
 // ToChatHistoryResponse maps a persisted ChatHistory row into the
@@ -121,6 +124,7 @@ func ToChatHistoryResponse(message *entity.ChatHistory) ChatHistoryResponse {
 		CreatedAt:         message.CreatedAt.Format(timeLayout),
 		IsBroadcast:       message.IsBroadcast,
 		BroadcastUUID:     message.BroadcastUUID,
+		HasAttachments:    message.HasAttachments,
 	}
 }
 

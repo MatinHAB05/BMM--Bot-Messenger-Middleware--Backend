@@ -30,4 +30,5 @@ type ChatHistoryRepository interface {
 	List(ctx context.Context, chatID uint, filter ChatHistoryFilter, offset, limit int) ([]entity.ChatHistory, *int64, error)
 	Delete(ctx context.Context, chatID, messageID uint) error
 	GetByBroadcastMsgID(ctx context.Context, broadcastMsgUUID uuid.UUID, chatID uint) (*entity.ChatHistory, error)
+	GetAllByBroadcastMsgID(ctx context.Context, broadcastMsgUUID uuid.UUID, chatID uint) ([]entity.ChatHistory, error)
 }

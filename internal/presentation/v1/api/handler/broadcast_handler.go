@@ -21,6 +21,7 @@ func NewBroadcastHandler(broadcastService service_contract.BroadcastService) *Br
 	return &BroadcastHandler{broadcastService: broadcastService}
 }
 
+// TODO : create config type
 const (
 	// maxBroadcastAttachmentFileSize bounds a single attachment file.
 	// 50MB matches Telegram's own general ceiling for bot-uploaded files;
@@ -30,7 +31,7 @@ const (
 	// attach at once (all of the same attachment_type). Mirrors
 	// Telegram's own sendMediaGroup cap (2-10 items) as a sane ceiling;
 	// adjust to taste.
-	maxBroadcastAttachmentFiles = 10
+	maxBroadcastAttachmentFiles = -1
 )
 
 // Send handles POST /api/v1/broadcast. The service fans the message out
@@ -117,7 +118,8 @@ func parseBroadcastMultipart(c *gin.Context) (service_contract.BroadcastRequest,
 	if len(fileHeaders) == 0 {
 		return req, nil
 	}
-	if len(fileHeaders) > maxBroadcastAttachmentFiles {
+	// ? -1 == no limitation
+	if maxBroadcastAttachmentFiles != -1 && len(fileHeaders) > maxBroadcastAttachmentFiles {
 		return req, fmt.Errorf("at most %d attachment files are allowed per broadcast, got %d", maxBroadcastAttachmentFiles, len(fileHeaders))
 	}
 
@@ -185,6 +187,29 @@ func (h *BroadcastHandler) Delete(c *gin.Context) {
 	}
 
 	if err := h.broadcastService.DeleteBroadcast(c.Request.Context(), companyID, broadcasgMsgUUID, req); err != nil {
+		fail(c, err)
+		return
+	}
+
+	success(c, http.StatusOK, gin.H{"message": "chat delete broadcast message deleted"})
+}
+
+// TODO
+// Delete handles DELETE /api/v1/broadcast/batch
+func (h *BroadcastHandler) DeleteBatch(c *gin.Context) {
+	var req service_contract.DeleteBroadcastBatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, exception.Wrap(exception.ErrBadRequest, err))
+		return
+	}
+
+	companyID, ok := tokencontext.GetCompanyID(c)
+	if !ok {
+		fail(c, exception.ErrMissingToken)
+		return
+	}
+
+	if err := h.broadcastService.DeleteBroadcastBatch(c.Request.Context(), companyID, req); err != nil {
 		fail(c, err)
 		return
 	}

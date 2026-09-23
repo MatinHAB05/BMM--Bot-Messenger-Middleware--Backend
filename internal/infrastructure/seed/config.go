@@ -12,13 +12,13 @@ type AdminChatConfig struct {
 }
 
 type Config struct {
-	CompanyName          string
-	CompanyCode          string
-	AdminUsername        string
-	AdminPassword        string
-	AdminEmail           string
-	AdminPhone           string
-	AdminChatsRawPayload string // json payload
+	CompanyName               string
+	CompanyCode               string
+	SuperAdminUsername        string
+	SuperAdminPassword        string
+	SuperAdminEmail           string
+	SuperAdminPhone           string
+	SuperAdminChatsRawPayload string // json payload
 }
 
 type policyRule struct {
@@ -33,6 +33,7 @@ var DefaultAdminPolicies = []policyRule{
 	// Broadcast
 	{Role: entity.RoleSuperAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/broadcast", Method: "POST"}},
 	{Role: entity.RoleSuperAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/broadcast/:id", Method: "DELETE"}},
+	{Role: entity.RoleSuperAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/broadcast/batch", Method: "DELETE"}},
 	{Role: entity.RoleSuperAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/broadcast/:id", Method: "PUT"}},
 
 	// Chats & Chat Histories

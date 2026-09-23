@@ -58,6 +58,13 @@ type DeleteBroadcastRequest struct {
 	Platforms []string `json:"platforms" binding:"required"`
 }
 
+// DeleteBroadcastBatchRequest deletes several broadcasts (each identified
+// by its own UUID) in one call, all restricted to the same Platforms set.
+type DeleteBroadcastBatchRequest struct {
+	Platforms    []string    `json:"platforms" binding:"required"`
+	BroadcastIDS []uuid.UUID `json:"brodcast_ids"  binding:"required"`
+}
+
 type UpdateBroadcastRequest struct {
 	Platforms []string             `json:"platforms" binding:"required"`
 	NewMessge UpdateChatHisRequest `json:"message" binding:"required"`
@@ -85,5 +92,6 @@ type BroadcastResponse struct {
 type BroadcastService interface {
 	Broadcast(ctx context.Context, companyID uint, req BroadcastRequest) (*BroadcastResponse, error)
 	DeleteBroadcast(ctx context.Context, companyID uint, broadcastMsgUUID uuid.UUID, req DeleteBroadcastRequest) error
+	DeleteBroadcastBatch(ctx context.Context, companyID uint, req DeleteBroadcastBatchRequest) error
 	UpdateBroadcast(ctx context.Context, companyID uint, broadcastMsgUUID uuid.UUID, req UpdateBroadcastRequest) error
 }

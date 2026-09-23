@@ -638,6 +638,7 @@ func (s *attachmentService) createMessageWithAttachments(ctx context.Context, re
 		MediaType:         req.MediaType,
 		RawPayload:        datatypes.JSON(req.RawPayload),
 		MessageTimestamp:  req.MessageTimestamp,
+		HasAttachments:    true,
 	}
 
 	err := s.trxManager.WithTransaction(ctx, func(trxCtx context.Context) error {

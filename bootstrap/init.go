@@ -134,6 +134,12 @@ func Init(ctx context.Context) (*App, error) {
 		return nil, err
 	}
 
+	
+	batchPool, err := newAntsPool(20, "batch")
+	if err != nil {
+		return nil, err
+	}
+
 	// ----------------------------------------------------------------
 	// 7. Repositories
 	// ----------------------------------------------------------------
@@ -262,7 +268,7 @@ func Init(ctx context.Context) (*App, error) {
 	// so its handlers/router mirror the Telegram ones above almost exactly —
 	// same command handlers, same dependency shape, just its own bot token
 	// and its own logger/adapter instance.
-	//todo
+	//TODO
 	basicBaleHandler := balehandlers.NewBasicHandler(chatService, chatHisService, attachService, sentbalemsgService, s3Repo, env.S3.Bucket, log, errlog)
 	directFeatChatCommandBaleHandler := balehandlers.NewDirectFeatChatCommandHandler(chatLinkService, errlog)
 	featChannelBaleHandler := balehandlers.NewFeatChannelHandler(chatLinkService, env.Bot.BaleBotUsername, errlog)
@@ -295,7 +301,7 @@ func Init(ctx context.Context) (*App, error) {
 	if telegramAdapter != nil {
 		clients = append(clients, telegramAdapter)
 	}
-	//todo
+	//TODO
 
 	baleAdapter, err := newBaleAdapter(env.Bot.BaleBotToken, baleDeps, baleCfg, log)
 	if err != nil {
@@ -317,6 +323,7 @@ func Init(ctx context.Context) (*App, error) {
 		log,
 		newBroadcastServiceConfig(env),
 		broadcastPool,
+		batchPool,
 	)
 
 	Services.BroadcastService = broadcastService
@@ -471,7 +478,7 @@ func newChannelPendingServiceConfig(env *Environment) appservice.ChannelPendingS
 
 func newSentBaleMsgServiceConfig() appservice.SentBaleMsgServiceConfig {
 	return appservice.SentBaleMsgServiceConfig{
-		TTL: time.Millisecond * 5000,
+		TTL: time.Second * 5000,
 	}
 }
 
@@ -483,20 +490,20 @@ func newMediaGroupServiceConfig() appservice.MediaGroupServiceConfig {
 
 func newBroadcastServiceConfig(env *Environment) appservice.BroadcastConfig {
 	return appservice.BroadcastConfig{
-		JobTimeout: 0,
+		JobTimeout:       0,
 		AttachmentBucket: env.S3.Bucket,
 	}
 }
 
 func newSeedConfig(env *Environment) seed.Config {
 	return seed.Config{
-		AdminUsername:        env.Admin.Username,
-		AdminPassword:        env.Admin.Password,
-		AdminEmail:           env.Admin.Email,
-		AdminPhone:           env.Admin.Phone,
-		CompanyName:          env.Admin.CompanyName,
-		CompanyCode:          env.Admin.CompanyCode,
-		AdminChatsRawPayload: env.Admin.Chats,
+		SuperAdminUsername:        env.SuperAdmin.Username,
+		SuperAdminPassword:        env.SuperAdmin.Password,
+		SuperAdminEmail:           env.SuperAdmin.Email,
+		SuperAdminPhone:           env.SuperAdmin.Phone,
+		CompanyName:               env.SuperAdmin.CompanyName,
+		CompanyCode:               env.SuperAdmin.CompanyCode,
+		SuperAdminChatsRawPayload: env.SuperAdmin.Chats,
 	}
 }
 

@@ -14,7 +14,7 @@ import (
 	"github.com/panjf2000/ants/v2"
 )
 
-// todo use mq :
+// TODO use mq :
 const emailDebugFile = "./SEND_EMAIL.txt"
 
 type emailService struct {

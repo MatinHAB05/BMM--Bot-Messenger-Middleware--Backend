@@ -17,5 +17,6 @@ func RegisterBroadcastRoutes(v1 *gin.RouterGroup, deps Dependencies, cfg *Config
 
 	broadcast.POST("", deps.BroadcastHandler.Send)
 	broadcast.DELETE("/:id", deps.BroadcastHandler.Delete)
+	broadcast.DELETE("/batch", deps.BroadcastHandler.DeleteBatch)
 	broadcast.PUT("/:id", deps.BroadcastHandler.Update)
 }

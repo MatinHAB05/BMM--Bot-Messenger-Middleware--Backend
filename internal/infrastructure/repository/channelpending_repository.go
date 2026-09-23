@@ -13,7 +13,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// todo : redis trx manager for all redis base repos
+// TODO : redis trx manager for all redis base repos
 type ChannelPendingRepository struct {
 	redisClient redisApt.Cache
 }

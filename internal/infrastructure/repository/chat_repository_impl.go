@@ -23,7 +23,7 @@ func NewChatRepository(db database.Database) repository_contract.ChatRepository 
 }
 
 func (r *chatRepository) Create(ctx context.Context, chat *entity.Chat) error {
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	if err := db.GetGormDB().WithContext(ctx).Create(chat).Error; err != nil {
@@ -40,7 +40,7 @@ func (r *chatRepository) Create(ctx context.Context, chat *entity.Chat) error {
 func (r *chatRepository) HalfCreate(ctx context.Context, chat *entity.Chat) error {
 	chat.CompanyID = nil
 
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	if err := db.GetGormDB().WithContext(ctx).Create(chat).Error; err != nil {
@@ -56,7 +56,7 @@ func (r *chatRepository) HalfCreate(ctx context.Context, chat *entity.Chat) erro
 func (r *chatRepository) FindByIDInCompany(ctx context.Context, companyID, id uint) (*entity.Chat, error) {
 	var chat entity.Chat
 
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	err := db.GetGormDB().WithContext(ctx).Where("id = ? AND company_id = ?", id, companyID).First(&chat).Error
@@ -73,7 +73,7 @@ func (r *chatRepository) FindByIDInCompany(ctx context.Context, companyID, id ui
 func (r *chatRepository) FindByPlatformChatIDInCompany(ctx context.Context, companyID uint, platform entity.MessengerPlatform, platformChatID string) (*entity.Chat, error) {
 	var chat entity.Chat
 
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	err := db.GetGormDB().WithContext(ctx).Where("company_id = ? AND platform = ? AND platform_chat_id = ?", companyID, platform, platformChatID).First(&chat).Error
@@ -91,7 +91,7 @@ func (r *chatRepository) FindByPlatformChatIDInCompany(ctx context.Context, comp
 func (r *chatRepository) FindByID(ctx context.Context, id uint) (*entity.Chat, error) {
 	var chat entity.Chat
 
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	err := db.GetGormDB().WithContext(ctx).Where("id = ?", id).First(&chat).Error
@@ -109,7 +109,7 @@ func (r *chatRepository) FindByID(ctx context.Context, id uint) (*entity.Chat, e
 func (r *chatRepository) FindByPlatformChatID(ctx context.Context, platform entity.MessengerPlatform, platformChatID string) (*entity.Chat, error) {
 	var chat entity.Chat
 
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	err := db.GetGormDB().WithContext(ctx).
@@ -127,7 +127,7 @@ func (r *chatRepository) FindByPlatformChatID(ctx context.Context, platform enti
 }
 
 func (r *chatRepository) List(ctx context.Context, companyID uint, filter repository_contract.ChatFilter, offset, limit int) ([]entity.Chat, *int64, error) {
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	baseQuery := func() *gorm.DB {
@@ -158,7 +158,7 @@ func (r *chatRepository) List(ctx context.Context, companyID uint, filter reposi
 }
 
 func (r *chatRepository) ListAll(ctx context.Context, companyID uint, platforms []string) (map[string][]entity.Chat, *int64, error) {
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	var chats []entity.Chat
@@ -185,7 +185,7 @@ func (r *chatRepository) ListAll(ctx context.Context, companyID uint, platforms 
 }
 
 func (r *chatRepository) Update(ctx context.Context, chat *entity.Chat) error {
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	res := db.GetGormDB().WithContext(ctx).Save(chat)
@@ -207,7 +207,7 @@ func (r *chatRepository) Update(ctx context.Context, chat *entity.Chat) error {
 }
 
 func (r *chatRepository) Delete(ctx context.Context, companyID, id uint) error {
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	res := db.GetGormDB().WithContext(ctx).Where("company_id = ?", companyID).Delete(&entity.Chat{}, "id = ?", id)
@@ -222,11 +222,16 @@ func (r *chatRepository) Delete(ctx context.Context, companyID, id uint) error {
 }
 
 func (r *chatRepository) GetAllChatsContainsBroadcastMsgUUID(ctx context.Context, companyID uint, broadcastMsgUUID uuid.UUID, platforms []string) (map[string][]entity.Chat, *int64, error) {
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
+	// Distinct("chats.*"): a broadcast with several attachments creates
+	// several chat_histories rows per chat, all sharing broadcastMsgUUID.
+	// Without Distinct, the join below would return that same chat once
+	// per attachment row instead of once.
 	query := db.GetGormDB().WithContext(ctx).
 		Model(&entity.Chat{}).
+		Distinct("chats.*").
 		Joins("JOIN chat_histories ON chat_histories.chat_id = chats.id").
 		Where("chat_histories.broadcast_uuid = ?", broadcastMsgUUID).
 		Where("chat_histories.is_broadcast = ?", true).

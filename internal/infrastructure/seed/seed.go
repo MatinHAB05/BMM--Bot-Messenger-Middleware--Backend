@@ -31,7 +31,7 @@ func Run(
 	log logger.Logger,
 ) (uint, error) {
 	var chats []AdminChatConfig
-	if err := json.Unmarshal([]byte(cfg.AdminChatsRawPayload), &chats); err != nil {
+	if err := json.Unmarshal([]byte(cfg.SuperAdminChatsRawPayload), &chats); err != nil {
 		return 0, err
 	}
 	log.Info("admin chat payload", logger.Any("data", chats))
@@ -51,28 +51,28 @@ func Run(
 		log.Info("seed: default company created", logger.String("code", company.Code), logger.Uint("company_id", company.ID))
 	}
 
-	admin, err := userRepo.FindByUsernameInCompany(ctx, company.ID, cfg.AdminUsername)
+	admin, err := userRepo.FindByUsernameInCompany(ctx, company.ID, cfg.SuperAdminUsername)
 	if err != nil && !exception.ErrUserNotFound.Is(err) {
 		return 0, fmt.Errorf("lookup admin user: %w", err)
 	}
 
 	if admin != nil {
-		log.Info("seed: admin user already exists, skipping creation", logger.String("username", cfg.AdminUsername))
+		log.Info("seed: admin user already exists, skipping creation", logger.String("username", cfg.SuperAdminUsername))
 	} else {
-		hash, hashErr := bcrypt.GenerateFromPassword([]byte(cfg.AdminPassword), bcrypt.DefaultCost)
+		hash, hashErr := bcrypt.GenerateFromPassword([]byte(cfg.SuperAdminPassword), bcrypt.DefaultCost)
 		if hashErr != nil {
 			return 0, fmt.Errorf("hash admin password: %w", hashErr)
 		}
 
 		admin = &entity.User{
 			CompanyID:       company.ID,
-			Username:        cfg.AdminUsername,
-			Email:           &cfg.AdminEmail,
+			Username:        cfg.SuperAdminUsername,
+			Email:           &cfg.SuperAdminEmail,
 			PasswordHash:    string(hash),
 			IsActive:        true,
 			IsVerifiedPhone: true,
 			IsVerifiedEmail: true,
-			Phone:           &cfg.AdminPhone,
+			Phone:           &cfg.SuperAdminPhone,
 		}
 		if createErr := userRepo.Create(ctx, admin); createErr != nil {
 			return 0, fmt.Errorf("create admin user: %w", createErr)

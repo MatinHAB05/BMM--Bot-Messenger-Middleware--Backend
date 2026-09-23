@@ -29,7 +29,7 @@ func NewChatHistoryService(chatRepo repository_contract.ChatRepository, chatHist
 }
 
 func (s *chatHistoryService) Create(ctx context.Context, message *service_contract.CreateMessageRequest) (*service_contract.ChatHistoryDetailResponse, error) {
-	//todo check retuen err if already exists
+	//TODO check retuen err if already exists
 
 	mess := &entity.ChatHistory{
 		ChatID:            message.ChatID,
@@ -40,7 +40,7 @@ func (s *chatHistoryService) Create(ctx context.Context, message *service_contra
 		MediaType:         message.MediaType,
 		RawPayload:        message.RawPayload,
 		MessageTimestamp:  message.MessageTimestamp,
-
+		HasAttachments:    message.HasAttachments,
 	}
 	if err := s.chatHistoryRepo.Create(ctx, mess); err != nil {
 		return nil, exception.Wrap(exception.ErrInternal, err)
@@ -53,7 +53,7 @@ func (s *chatHistoryService) Create(ctx context.Context, message *service_contra
 }
 
 func (s *chatHistoryService) Upsert(ctx context.Context, message *service_contract.CreateMessageRequest) (*service_contract.ChatHistoryDetailResponse, error) {
-	//todo check retuen err if already exists
+	//TODO check retuen err if already exists
 
 	mess := &entity.ChatHistory{
 		ChatID:            message.ChatID,
@@ -64,7 +64,7 @@ func (s *chatHistoryService) Upsert(ctx context.Context, message *service_contra
 		MediaType:         message.MediaType,
 		RawPayload:        message.RawPayload,
 		MessageTimestamp:  message.MessageTimestamp,
-
+		HasAttachments:    message.HasAttachments,
 	}
 	m, err := s.chatHistoryRepo.FindByPlatformMessgeID(ctx, mess.ChatID, uint(message.PlatformMessageID))
 

@@ -427,14 +427,14 @@ func (s *authService) checkCrdentionls(ctx context.Context, email, phone, userna
 	return &ok, nil
 }
 
-//todo
+//TODO
 
 func (s *authService) SendOTP(ctx context.Context, identifier, otpType string) (*service_contract.SendAuthOTPResponse, error) {
 	if !(otpType == otp.TypeEmail.String() || otpType == otp.TypePhone.String()) {
 		return nil, exception.ErrBadRequest
 	}
 
-	//todo : real send otp
+	//TODO : real send otp
 
 	r, err := s.otpService.SendOTP(ctx, identifier, otp.Type(otpType), nil)
 	if err != nil {

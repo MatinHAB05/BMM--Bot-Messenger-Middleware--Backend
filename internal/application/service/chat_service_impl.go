@@ -270,6 +270,7 @@ func (s *chatService) IngestUpdate(ctx context.Context, companyID uint, update s
 		MediaType:         update.MediaType,
 		RawPayload:        datatypes.JSON(update.RawPayload),
 		MessageTimestamp:  update.MessageTimestamp,
+		HasAttachments:    update.HasAttachments,
 	}
 	if err := s.chatHistoryRepo.Create(ctx, message); err != nil {
 		return fmt.Errorf("persist chat history: %w", err)

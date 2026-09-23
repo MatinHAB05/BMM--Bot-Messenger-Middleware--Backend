@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// todo : replace some of them to .env
+// TODO : replace some of them to .env
 // Structural constants grouped into dedicated categories.
 type ServerConstants struct {
 	APIVersion       string        `json:"api_version"`

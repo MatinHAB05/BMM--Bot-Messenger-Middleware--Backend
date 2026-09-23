@@ -3,6 +3,8 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"sync"
@@ -20,7 +22,7 @@ import (
 	"gorm.io/datatypes"
 )
 
-// todo : mq :)
+// TODO : mq :)
 type BroadcastConfig struct {
 	JobTimeout time.Duration
 	// AttachmentBucket is the object storage (MinIO/S3) bucket broadcast
@@ -67,7 +69,8 @@ type broadcastService struct {
 	storageRepo        repository_contract.StorageRepository
 	log                logger.Logger
 	cfg                BroadcastConfig
-	pool               *ants.Pool
+	pool               *ants.Pool // per-chat fan-out (runJobs)
+	batchPool          *ants.Pool // per-broadcast-UUID fan-out (DeleteBroadcastBatch) -- kept separate from pool so a batch job blocked waiting on its own chat-level jobs can never exhaust the workers those chat-level jobs need; see DeleteBroadcastBatch's doc comment.
 }
 
 func NewBroadcastService(
@@ -79,6 +82,7 @@ func NewBroadcastService(
 	log logger.Logger,
 	cfg BroadcastConfig,
 	pool *ants.Pool,
+	batchPool *ants.Pool,
 ) service_contract.BroadcastService {
 	registry := make(map[string]messenger.MessengerClient, len(clients))
 	for _, c := range clients {
@@ -94,6 +98,7 @@ func NewBroadcastService(
 		log:                log.With(logger.String("component", "broadcast_service")),
 		cfg:                cfg,
 		pool:               pool,
+		batchPool:          batchPool,
 	}
 }
 
@@ -175,7 +180,6 @@ func (s *broadcastService) uploadBroadcastAttachments(ctx context.Context, broad
 	if _, err := s.storageRepo.UploadFilesBatch(ctx, s.cfg.AttachmentBucket, payloads); err != nil {
 		return nil, fmt.Errorf("upload broadcast attachments: %w", err)
 	}
-
 	return prepared, nil
 }
 
@@ -435,6 +439,7 @@ func (s *broadcastService) sendAttachmentBroadcastJob(
 			MessageTimestamp:  mes.Timestamp,
 			IsBroadcast:       true,
 			BroadcastUUID:     &broadcastUUID,
+			HasAttachments:    true,
 		}
 
 		// Passing Attachments here (rather than persisting them
@@ -472,14 +477,34 @@ func (s *broadcastService) sendAttachmentBroadcastJob(
 				logger.String("file", f.fileName),
 			)
 		}
-	}
 
-	if err := s.sentbalemsgService.SetSentBaleMsg(ctx, job.chat.PlatformChatID, caption); err != nil { // ? : FUCK BALE!
-		result.Success = false
-		result.Error = append(result.Error, err.Error())
+		// Each attachment is a real, separate platform message (see the
+		// file loop above) -- so it needs its own "sent" record, not one
+		// shared record for the whole batch. The hash ties the record to
+		// exactly what was sent for THIS message: the broadcast's caption
+		// plus this file's own bytes, so two different attachments (or the
+		// same attachment resent under a different caption) never collide
+		// on the same value.
+		sentHash := attachmentSentMsgHash(caption, f.data)
+		if err := s.sentbalemsgService.SetSentBaleMsg(ctx, job.chat.PlatformChatID, sentHash); err != nil { // ? : FUCK BALE!
+			result.Success = false
+			result.Error = append(result.Error, fmt.Sprintf("%s: %s", f.fileName, err.Error()))
+		}
 	}
 
 	return jobResult{result: result, target: target}
+}
+
+// attachmentSentMsgHash produces a stable, content-addressed identifier for
+// one broadcast attachment message: sha256 of the broadcast caption
+// concatenated with this file's raw bytes, hex-encoded. Used in place of
+// the plain caption so SetSentBaleMsg gets a value unique to each attachment
+// message instead of the same caption repeated for every file in the batch.
+func attachmentSentMsgHash(caption string, data []byte) string {
+	h := sha256.New()
+	h.Write([]byte(caption))
+	h.Write(data)
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func (s *broadcastService) DeleteBroadcast(ctx context.Context, companyID uint, broadcastMsgUUID uuid.UUID, req service_contract.DeleteBroadcastRequest) error {
@@ -490,7 +515,88 @@ func (s *broadcastService) DeleteBroadcast(ctx context.Context, companyID uint, 
 		return err
 	}
 
-	platformChats, _, err := s.chatRepo.GetAllChatsContainsBroadcastMsgUUID(ctx, companyID, broadcastMsgUUID, req.Platforms)
+	return s.deleteBroadcastByUUID(ctx, companyID, broadcastMsgUUID, req.Platforms)
+}
+
+// DeleteBroadcastBatch deletes several broadcasts (each identified by its
+// own UUID) in one call. Every UUID gets the full deleteBroadcastByUUID
+// treatment independently -- its own chat lookup, its own per-chat/
+// per-message fan-out -- submitted to s.batchPool, a pool dedicated to
+// this batch level and kept separate from s.pool (which deleteBroadcastByUUID's
+// own runJobs call uses for its per-chat jobs). Sharing one pool across
+// both levels would deadlock: an outer batch job would hold a worker for
+// its entire duration while waiting on inner chat-level jobs that need a
+// free worker from that same pool to run at all. Two separate pools rule
+// that out entirely, regardless of batch size or pool capacity.
+//
+// A failure on one broadcast UUID does not stop the rest from being
+// processed; every failure is collected and reported together at the end.
+func (s *broadcastService) DeleteBroadcastBatch(ctx context.Context, companyID uint, req service_contract.DeleteBroadcastBatchRequest) error {
+	if len(req.Platforms) == 0 {
+		return exception.Wrap(exception.ErrInternal, fmt.Errorf("no platforms specified"))
+	}
+	if len(req.BroadcastIDS) == 0 {
+		return exception.Wrap(exception.ErrInternal, fmt.Errorf("no broadcast ids specified"))
+	}
+	if err := s.validatePlatforms(req.Platforms); err != nil {
+		return err
+	}
+
+	var (
+		mu       sync.Mutex
+		failures int
+		errs     []string
+	)
+
+	var wg sync.WaitGroup
+
+	for _, broadcastMsgUUID := range req.BroadcastIDS {
+		broadcastMsgUUID := broadcastMsgUUID // capture per-iteration value
+		wg.Add(1)
+
+		err := s.batchPool.Submit(func() {
+			defer wg.Done()
+
+			if err := s.deleteBroadcastByUUID(ctx, companyID, broadcastMsgUUID, req.Platforms); err != nil {
+				s.log.Error(err, "broadcast batch delete: broadcast failed",
+					logger.String("broadcast_uuid", broadcastMsgUUID.String()),
+				)
+				mu.Lock()
+				failures++
+				errs = append(errs, fmt.Sprintf("%s: %s", broadcastMsgUUID, err.Error()))
+				mu.Unlock()
+			}
+		})
+
+		if err != nil {
+			wg.Done()
+			s.log.Error(err, "failed to submit broadcast batch delete job to ants pool",
+				logger.String("broadcast_uuid", broadcastMsgUUID.String()),
+			)
+			mu.Lock()
+			failures++
+			errs = append(errs, fmt.Sprintf("%s: failed to submit job: %s", broadcastMsgUUID, err.Error()))
+			mu.Unlock()
+		}
+	}
+
+	wg.Wait()
+
+	if failures > 0 {
+		return exception.Wrap(
+			exception.ErrInternal,
+			fmt.Errorf("%d/%d broadcasts failed to delete: %s", failures, len(req.BroadcastIDS), strings.Join(errs, "; ")),
+		)
+	}
+	return nil
+}
+
+// deleteBroadcastByUUID deletes every message belonging to one broadcast
+// (one UUID) across every target chat: this is DeleteBroadcast's original
+// body, factored out so DeleteBroadcast and DeleteBroadcastBatch share it
+// instead of duplicating the fan-out/cleanup logic.
+func (s *broadcastService) deleteBroadcastByUUID(ctx context.Context, companyID uint, broadcastMsgUUID uuid.UUID, platforms []string) error {
+	platformChats, _, err := s.chatRepo.GetAllChatsContainsBroadcastMsgUUID(ctx, companyID, broadcastMsgUUID, platforms)
 	if err != nil {
 		return exception.Wrap(exception.ErrInternal, err)
 	}
@@ -499,7 +605,11 @@ func (s *broadcastService) DeleteBroadcast(ctx context.Context, companyID uint, 
 		client := s.clients[job.platform]
 		target := targetFromChat(job.chat)
 
-		brmsg, err := s.chatHisRepo.GetByBroadcastMsgID(ctx, broadcastMsgUUID, job.chat.ID)
+		// A multi-attachment broadcast sent N real, separate platform
+		// messages to this chat -- all sharing broadcastMsgUUID. Every one
+		// of them has to be deleted individually; GetByBroadcastMsgID
+		// (singular) would silently leave the rest behind.
+		brmsgs, err := s.chatHisRepo.GetAllByBroadcastMsgID(ctx, broadcastMsgUUID, job.chat.ID)
 		if err != nil {
 			s.log.Error(err, "broadcast delete: history lookup failed",
 				logger.String("platform", job.platform),
@@ -515,42 +625,41 @@ func (s *broadcastService) DeleteBroadcast(ctx context.Context, companyID uint, 
 			}
 		}
 
-		if err := client.DeleteMessage(ctx, job.chat.PlatformChatID, int(brmsg.PlatformMessageID)); err != nil {
-			s.log.Error(err, "broadcast delete: platform delete failed",
-				logger.String("platform", job.platform),
-				logger.String("target_id", job.chat.PlatformChatID),
-			)
-			return jobResult{
-				result: service_contract.BroadcastResult{
-					Platform: job.platform,
-					Success:  false,
-					Error:    []string{err.Error()},
-				},
-				target: target,
-			}
-		}
-
-		s.log.Info("broadcast message deleted",
-			logger.String("platform", job.platform),
-			logger.String("target_id", job.chat.PlatformChatID),
-		)
-
 		result := service_contract.BroadcastResult{
 			Platform: job.platform,
 			Success:  true,
 		}
 
-		if err := s.chatHisRepo.Delete(ctx, job.chat.ID, brmsg.ID); err != nil {
-			result.Success = false
-			result.Error = []string{err.Error()}
-			s.log.Error(err, "broadcast delete: history cleanup failed",
+		for _, brmsg := range brmsgs {
+			if err := client.DeleteMessage(ctx, job.chat.PlatformChatID, int(brmsg.PlatformMessageID)); err != nil {
+				result.Success = false
+				result.Error = append(result.Error, err.Error())
+				s.log.Error(err, "broadcast delete: platform delete failed",
+					logger.String("platform", job.platform),
+					logger.String("target_id", job.chat.PlatformChatID),
+				)
+				// keep going -- one failed file shouldn't stop the rest
+				// of this chat's messages from being cleaned up
+				continue
+			}
+
+			s.log.Info("broadcast message deleted",
 				logger.String("platform", job.platform),
 				logger.String("target_id", job.chat.PlatformChatID),
 			)
-			s.log.Warn("message deleted on platform but history row not cleaned up; retry/reconciliation needed",
-				logger.String("platform", job.platform),
-				logger.String("target_id", job.chat.PlatformChatID),
-			)
+
+			if err := s.chatHisRepo.Delete(ctx, job.chat.ID, brmsg.ID); err != nil {
+				result.Success = false
+				result.Error = append(result.Error, err.Error())
+				s.log.Error(err, "broadcast delete: history cleanup failed",
+					logger.String("platform", job.platform),
+					logger.String("target_id", job.chat.PlatformChatID),
+				)
+				s.log.Warn("message deleted on platform but history row not cleaned up; retry/reconciliation needed",
+					logger.String("platform", job.platform),
+					logger.String("target_id", job.chat.PlatformChatID),
+				)
+			}
 		}
 
 		return jobResult{result: result, target: target}
@@ -590,9 +699,15 @@ func (s *broadcastService) UpdateBroadcast(ctx context.Context, companyID uint, 
 		client := s.clients[job.platform]
 		target := targetFromChat(job.chat)
 
-		brmsg, err := s.chatHisRepo.GetByBroadcastMsgID(ctx, broadcastMsgUUID, job.chat.ID)
+		// Same one-broadcastUUID-to-many-messages situation as Delete: a
+		// multi-attachment broadcast left several rows for this chat. Only
+		// the first one (ordered by id ASC) ever carried text/caption --
+		// see sendAttachmentBroadcastJob's i==0 rule -- so that's the only
+		// one there's anything to edit on; the rest were sent without a
+		// caption and have nothing to update.
+		brmsgs, err := s.chatHisRepo.GetAllByBroadcastMsgID(ctx, broadcastMsgUUID, job.chat.ID)
 		if err != nil {
-			s.log.Error(err, "broadcast delete: history lookup failed",
+			s.log.Error(err, "broadcast update: history lookup failed",
 				logger.String("platform", job.platform),
 				logger.String("target_id", job.chat.PlatformChatID),
 			)
@@ -606,8 +721,10 @@ func (s *broadcastService) UpdateBroadcast(ctx context.Context, companyID uint, 
 			}
 		}
 
-		if _, err := client.EditMessageText(ctx, job.chat.PlatformChatID, int(brmsg.PlatformMessageID), req.NewMessge.Content); err != nil {
-			s.log.Error(err, "broadcast delete: platform delete failed",
+		brmsg := &brmsgs[0]
+
+		if _, err := client.EditMessageText(ctx, job.chat.PlatformChatID, int(brmsg.PlatformMessageID), req.NewMessge.Content, brmsg.HasAttachments); err != nil {
+			s.log.Error(err, "broadcast update: platform edit failed",
 				logger.String("platform", job.platform),
 				logger.String("target_id", job.chat.PlatformChatID),
 			)
@@ -621,7 +738,7 @@ func (s *broadcastService) UpdateBroadcast(ctx context.Context, companyID uint, 
 			}
 		}
 
-		s.log.Info("broadcast message deleted",
+		s.log.Info("broadcast message updated",
 			logger.String("platform", job.platform),
 			logger.String("target_id", job.chat.PlatformChatID),
 		)
@@ -638,11 +755,11 @@ func (s *broadcastService) UpdateBroadcast(ctx context.Context, companyID uint, 
 		if err := s.chatHisRepo.Upsert(ctx, brmsg); err != nil {
 			result.Success = false
 			result.Error = []string{err.Error()}
-			s.log.Error(err, "broadcast delete: history cleanup failed",
+			s.log.Error(err, "broadcast update: history persist failed",
 				logger.String("platform", job.platform),
 				logger.String("target_id", job.chat.PlatformChatID),
 			)
-			s.log.Warn("message deleted on platform but history row not cleaned up; retry/reconciliation needed",
+			s.log.Warn("message edited on platform but history row not updated; retry/reconciliation needed",
 				logger.String("platform", job.platform),
 				logger.String("target_id", job.chat.PlatformChatID),
 			)
