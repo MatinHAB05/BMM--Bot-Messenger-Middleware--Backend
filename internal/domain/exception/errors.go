@@ -16,9 +16,12 @@ import (
 // ==========================================
 var (
 	// User domain errors
-	ErrDomainUserNotFound      = errors.New("user not found")
-	ErrDomainUserAlreadyExists = errors.New("user already exists")
-	ErrDomainUserInactive      = errors.New("user account is deactivated")
+	ErrDomainUserNotFound              = errors.New("user not found")
+	ErrDomainUserAlreadyExists         = errors.New("user already exists")
+	ErrDomainUserEmailAlreadyExists    = errors.New("user email already exists")
+	ErrDomainUserPhoneAlreadyExists    = errors.New("user phone already exists")
+	ErrDomainUserUsernameAlreadyExists = errors.New("user username already exists")
+	ErrDomainUserInactive              = errors.New("user account is deactivated")
 
 	// Auth & OTP domain errors
 	ErrDomainInvalidCredentials   = errors.New("invalid credentials")
@@ -41,12 +44,23 @@ var (
 	ErrDomainCompanyInactive      = errors.New("company is deactivated")
 	ErrDomainCompanyAlreadyExists = errors.New("company already exists")
 
-	// Chat, Channel & Message domain errors
+	// Chat, Channel, Message & Attachment domain errors
 	ErrDomainChannelNotFound              = errors.New("channel not found")
 	ErrDomainChatNotFound                 = errors.New("chat not found")
 	ErrDomainChatAlreadyExists            = errors.New("chat already exists")
 	ErrDomainChatCompanyAlreadyRegistered = errors.New("chat is already registered with this company")
 	ErrDomainMessageNotFound              = errors.New("message not found")
+	ErrDomainSentBaleMsgNotFound          = errors.New("sent bale msg not found")
+	ErrDomainMediaGroupMsgNotFound        = errors.New("media group message not found")
+	ErrDomainAttachmentNotFound           = errors.New("attachment not found")
+
+	// Messenger / platform delivery domain errors
+	ErrDomainPlatformForbidden    = errors.New("messenger platform forbidden")
+	ErrDomainPlatformBadRequest   = errors.New("messenger platform bad request")
+	ErrDomainPlatformUnauthorized = errors.New("messenger platform unauthorized")
+	ErrDomainPlatformRateLimited  = errors.New("messenger platform rate limited")
+	ErrDomainPlatformNotFound     = errors.New("messenger platform target not found")
+	ErrDomainPlatformConflict     = errors.New("messenger platform conflict")
 
 	// RBAC / Policy domain errors
 	ErrDomainRoleNotFound       = errors.New("role not found")
@@ -64,7 +78,6 @@ var (
 	ErrDomainUnsupportedPlatform = errors.New("unsupported platform")
 	ErrDomainHandlerRouting      = errors.New("handler routing failed")
 	ErrDomainComingSoon          = errors.New("feature is not completed yet")
-	ErrDomainSentBaleMsgNotFound = errors.New("sent bale msg not found")
 )
 
 // ==========================================
@@ -74,9 +87,9 @@ var (
 	// User
 	ErrUserNotFound              = &AppError{Code: "USER_NOT_FOUND", Message: "user not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainUserNotFound}
 	ErrUserAlreadyExists         = &AppError{Code: "USER_ALREADY_EXISTS", Message: "user already exists", HTTPStatus: http.StatusConflict, Err: ErrDomainUserAlreadyExists}
-	ErrUserEmailAlreadyExists    = &AppError{Code: "USER_EMAIL_ALREADY_EXISTS", Message: "email already in use", HTTPStatus: http.StatusConflict, Err: ErrDomainUserAlreadyExists}
-	ErrUserPhoneAlreadyExists    = &AppError{Code: "USER_PHONE_ALREADY_EXISTS", Message: "phone number already in use", HTTPStatus: http.StatusConflict, Err: ErrDomainUserAlreadyExists}
-	ErrUserUsernameAlreadyExists = &AppError{Code: "USER_USERNAME_ALREADY_EXISTS", Message: "username already in use", HTTPStatus: http.StatusConflict, Err: ErrDomainUserAlreadyExists}
+	ErrUserEmailAlreadyExists    = &AppError{Code: "USER_EMAIL_ALREADY_EXISTS", Message: "email already in use", HTTPStatus: http.StatusConflict, Err: ErrDomainUserEmailAlreadyExists}
+	ErrUserPhoneAlreadyExists    = &AppError{Code: "USER_PHONE_ALREADY_EXISTS", Message: "phone number already in use", HTTPStatus: http.StatusConflict, Err: ErrDomainUserPhoneAlreadyExists}
+	ErrUserUsernameAlreadyExists = &AppError{Code: "USER_USERNAME_ALREADY_EXISTS", Message: "username already in use", HTTPStatus: http.StatusConflict, Err: ErrDomainUserUsernameAlreadyExists}
 	ErrUserInactive              = &AppError{Code: "USER_INACTIVE", Message: "user account is deactivated", HTTPStatus: http.StatusForbidden, Err: ErrDomainUserInactive}
 
 	// Auth & OTP
@@ -105,20 +118,30 @@ var (
 	ErrCompanyInactive      = &AppError{Code: "COMPANY_INACTIVE", Message: "company is deactivated", HTTPStatus: http.StatusForbidden, Err: ErrDomainCompanyInactive}
 	ErrCompanyAlreadyExists = &AppError{Code: "COMPANY_ALREADY_EXISTS", Message: "company code or name already exists", HTTPStatus: http.StatusConflict, Err: ErrDomainCompanyAlreadyExists}
 
-	// Chat, Channel & Message
+	// Chat, Channel, Message & Attachment
 	ErrChannelNotFound              = &AppError{Code: "CHANNEL_NOT_FOUND", Message: "channel not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainChannelNotFound}
 	ErrChatNotFound                 = &AppError{Code: "CHAT_NOT_FOUND", Message: "chat not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainChatNotFound}
 	ErrChatAlreadyExists            = &AppError{Code: "CHAT_ALREADY_EXISTS", Message: "this chat is already registered", HTTPStatus: http.StatusConflict, Err: ErrDomainChatAlreadyExists}
 	ErrChatCompanyAlreadyRegistered = &AppError{Code: "CHAT_ALREADY_REG_WITH_COMPANY", Message: "this chat is already registered for your company", HTTPStatus: http.StatusConflict, Err: ErrDomainChatCompanyAlreadyRegistered}
 	ErrMessageNotFound              = &AppError{Code: "MESSAGE_NOT_FOUND", Message: "message not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainMessageNotFound}
+	ErrSentBaleMsgNotFound          = &AppError{Code: "SENT_BALE_MSG_NOT_FOUND", Message: "sent bale message not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainSentBaleMsgNotFound}
+	ErrMediaGroupMsgNotFound        = &AppError{Code: "MEDIA_GROUP_MSG_NOT_FOUND", Message: "media group message not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainMediaGroupMsgNotFound}
+	ErrAttachmentNotFound           = &AppError{Code: "ATTACHMENT_NOT_FOUND", Message: "attachment not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainAttachmentNotFound}
+
+	// Messenger / platform delivery (synced with pkg/messenger's
+	// engine-agnostic error sentinels -- see broadcastService.mapMessengerErr)
+	ErrPlatformForbidden    = &AppError{Code: "PLATFORM_FORBIDDEN", Message: "the messaging platform denied this action (e.g. the bot was blocked or removed)", HTTPStatus: http.StatusForbidden, Err: ErrDomainPlatformForbidden}
+	ErrPlatformBadRequest   = &AppError{Code: "PLATFORM_BAD_REQUEST", Message: "the messaging platform rejected the request as malformed", HTTPStatus: http.StatusBadRequest, Err: ErrDomainPlatformBadRequest}
+	ErrPlatformUnauthorized = &AppError{Code: "PLATFORM_UNAUTHORIZED", Message: "the messaging platform rejected this bot's credentials", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainPlatformUnauthorized}
+	ErrPlatformRateLimited  = &AppError{Code: "PLATFORM_RATE_LIMITED", Message: "the messaging platform is rate-limiting this bot", HTTPStatus: http.StatusTooManyRequests, Err: ErrDomainPlatformRateLimited}
+	ErrPlatformNotFound     = &AppError{Code: "PLATFORM_TARGET_NOT_FOUND", Message: "the messaging platform reports this chat or message no longer exists", HTTPStatus: http.StatusNotFound, Err: ErrDomainPlatformNotFound}
+	ErrPlatformConflict     = &AppError{Code: "PLATFORM_CONFLICT", Message: "the messaging platform reports a conflicting request", HTTPStatus: http.StatusConflict, Err: ErrDomainPlatformConflict}
 
 	// RBAC
-	ErrRoleNotFound          = &AppError{Code: "ROLE_NOT_FOUND", Message: "role not found or has no permissions", HTTPStatus: http.StatusNotFound, Err: ErrDomainRoleNotFound}
-	ErrPermissionNotFound    = &AppError{Code: "PERMISSION_NOT_FOUND", Message: "permission not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainPermissionNotFound}
-	ErrEnforcerNil           = &AppError{Code: "ENFORCER_NIL", Message: "enforcer instance is not initialized", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainEnforcerNil}
-	ErrRoleSyncFailed        = &AppError{Code: "ROLE_SYNC_FAILED", Message: "failed to synchronize user roles with the policy store", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainRoleSyncFailed}
-	ErrSentBaleMsgNotFound   = &AppError{Code: "SENT_BALE_MSG_NOTFOUND", Message: "sent bale msg nt found", HTTPStatus: http.StatusNotFound, Err: ErrDomainSentBaleMsgNotFound}
-	ErrMediaGroupMsgNotFound = &AppError{Code: "ErrMediaGroupMsgNotFound", Message: "ErrMediaGroupMsgNotFound", HTTPStatus: http.StatusNotFound, Err: ErrDomainSentBaleMsgNotFound}
+	ErrRoleNotFound       = &AppError{Code: "ROLE_NOT_FOUND", Message: "role not found or has no permissions", HTTPStatus: http.StatusNotFound, Err: ErrDomainRoleNotFound}
+	ErrPermissionNotFound = &AppError{Code: "PERMISSION_NOT_FOUND", Message: "permission not found", HTTPStatus: http.StatusNotFound, Err: ErrDomainPermissionNotFound}
+	ErrEnforcerNil        = &AppError{Code: "ENFORCER_NIL", Message: "enforcer instance is not initialized", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainEnforcerNil}
+	ErrRoleSyncFailed     = &AppError{Code: "ROLE_SYNC_FAILED", Message: "failed to synchronize user roles with the policy store", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainRoleSyncFailed}
 
 	// General & Infrastructure
 	ErrDatabaseOperation   = &AppError{Code: "DATABASE_ERROR", Message: "database operation failed", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainDatabaseOperation}
@@ -133,13 +156,6 @@ var (
 	ErrFalsyHandlerRouting = &AppError{Code: "HANDLER_ROUTING_FAILED", Message: "failed to route handlers", HTTPStatus: http.StatusInternalServerError, Err: ErrDomainHandlerRouting}
 	ErrComingSoon          = &AppError{Code: "COMING_SOON", Message: "this feature is not yet completed", HTTPStatus: http.StatusMethodNotAllowed, Err: ErrDomainComingSoon}
 )
-
-var ErrAttachmentNotFound = &AppError{
-	Code:       "ATTACHMENT_NOT_FOUND",
-	Message:    "attachment not found",
-	HTTPStatus: http.StatusNotFound,
-	Err:        ErrChatNotFound,
-}
 
 // ==========================================
 // 3. AppError Definition & Helper Methods

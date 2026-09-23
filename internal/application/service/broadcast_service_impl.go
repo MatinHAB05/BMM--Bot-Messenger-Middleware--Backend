@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -137,6 +138,42 @@ func validateBroadcastAttachment(a service_contract.BroadcastAttachment) error {
 		}
 	}
 	return nil
+}
+
+// mapMessengerErr classifies an error returned by a messenger.MessengerClient
+// call (SendMessage, SendAttachment, EditMessageText, DeleteMessage) into
+// this application's own exception.AppError vocabulary, so a broadcast
+// failure carries a stable Code/HTTPStatus like everything else this
+// service returns, instead of an opaque platform-adapter error string.
+//
+// The classification itself is done against pkg/messenger's
+// engine-agnostic sentinels (messenger.ErrorForbidden and its
+// siblings) -- every concrete engine adapter (telegram, bale, ...)
+// already maps its own SDK's errors onto those, so this is the one
+// place in the service layer that needs to know about them. An error
+// that doesn't match any sentinel (a non-platform error, e.g. a
+// context deadline) falls back to the pre-existing generic
+// ErrSendMessagePlatform, unchanged from before this mapping existed.
+// A nil err returns nil.
+func mapMessengerErr(err error) *exception.AppError {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, messenger.ErrorForbidden):
+		return exception.ErrPlatformForbidden
+	case errors.Is(err, messenger.ErrorBadRequest):
+		return exception.ErrPlatformBadRequest
+	case errors.Is(err, messenger.ErrorUnauthorized):
+		return exception.ErrPlatformUnauthorized
+	case errors.Is(err, messenger.ErrorTooManyRequests):
+		return exception.ErrPlatformRateLimited
+	case errors.Is(err, messenger.ErrorNotFound):
+		return exception.ErrPlatformNotFound
+	case errors.Is(err, messenger.ErrorConflict):
+		return exception.ErrPlatformConflict
+	default:
+		return exception.ErrSendMessagePlatform
+	}
 }
 
 // sanitizeObjectKeySegment keeps a user-supplied file name from breaking
@@ -323,7 +360,8 @@ func (s *broadcastService) sendTextBroadcastJob(ctx context.Context, job broadca
 
 	mes, err := client.SendMessage(ctx, job.chat.PlatformChatID, message)
 	if err != nil {
-		s.log.Error(err, "broadcast send failed",
+		appErr := mapMessengerErr(err)
+		s.log.Error(appErr, "broadcast send failed",
 			logger.String("platform", job.platform),
 			logger.String("target_id", job.chat.PlatformChatID),
 		)
@@ -331,7 +369,7 @@ func (s *broadcastService) sendTextBroadcastJob(ctx context.Context, job broadca
 			result: service_contract.BroadcastResult{
 				Platform: job.platform,
 				Success:  false,
-				Error:    []string{err.Error()},
+				Error:    []string{appErr.Error()},
 			},
 			target: target,
 		}
@@ -412,13 +450,14 @@ func (s *broadcastService) sendAttachmentBroadcastJob(
 			Data:     bytes.NewReader(f.data), // fresh reader: every job/file reads the same buffered bytes independently
 		})
 		if err != nil {
-			s.log.Error(err, "broadcast attachment send failed",
+			appErr := mapMessengerErr(err)
+			s.log.Error(appErr, "broadcast attachment send failed",
 				logger.String("platform", job.platform),
 				logger.String("target_id", job.chat.PlatformChatID),
 				logger.String("file", f.fileName),
 			)
 			result.Success = false
-			result.Error = append(result.Error, fmt.Sprintf("%s: %s", f.fileName, err.Error()))
+			result.Error = append(result.Error, fmt.Sprintf("%s: %s", f.fileName, appErr.Error()))
 			continue
 		}
 
@@ -632,9 +671,10 @@ func (s *broadcastService) deleteBroadcastByUUID(ctx context.Context, companyID 
 
 		for _, brmsg := range brmsgs {
 			if err := client.DeleteMessage(ctx, job.chat.PlatformChatID, int(brmsg.PlatformMessageID)); err != nil {
+				appErr := mapMessengerErr(err)
 				result.Success = false
-				result.Error = append(result.Error, err.Error())
-				s.log.Error(err, "broadcast delete: platform delete failed",
+				result.Error = append(result.Error, appErr.Error())
+				s.log.Error(appErr, "broadcast delete: platform delete failed",
 					logger.String("platform", job.platform),
 					logger.String("target_id", job.chat.PlatformChatID),
 				)
@@ -724,7 +764,8 @@ func (s *broadcastService) UpdateBroadcast(ctx context.Context, companyID uint, 
 		brmsg := &brmsgs[0]
 
 		if _, err := client.EditMessageText(ctx, job.chat.PlatformChatID, int(brmsg.PlatformMessageID), req.NewMessge.Content, brmsg.HasAttachments); err != nil {
-			s.log.Error(err, "broadcast update: platform edit failed",
+			appErr := mapMessengerErr(err)
+			s.log.Error(appErr, "broadcast update: platform edit failed",
 				logger.String("platform", job.platform),
 				logger.String("target_id", job.chat.PlatformChatID),
 			)
@@ -732,7 +773,7 @@ func (s *broadcastService) UpdateBroadcast(ctx context.Context, companyID uint, 
 				result: service_contract.BroadcastResult{
 					Platform: job.platform,
 					Success:  false,
-					Error:    []string{err.Error()},
+					Error:    []string{appErr.Error()},
 				},
 				target: target,
 			}
