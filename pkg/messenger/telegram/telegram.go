@@ -4,6 +4,7 @@ package telegram
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"messenger-backend/pkg/messenger"
@@ -85,7 +86,7 @@ func NewAdapter(token string, onUpdate UpdateHandler, onMessage MessageHandler, 
 
 	b, err := tgbot.New(token, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("telegram: failed to initialize bot client: %w", err)
+		return nil, fmt.Errorf("telegram: failed to initialize bot client: %w", mapError(err))
 	}
 
 	// Invoke external router configuration if provided
@@ -107,6 +108,41 @@ func (a *Adapter) Platform() string {
 	return a.platform
 }
 
+// mapError classifies an error returned by the underlying
+// github.com/go-telegram/bot SDK into one of package messenger's
+// engine-agnostic sentinel errors (see messenger.ErrorForbidden and its
+// siblings), so that callers depending only on package messenger --
+// never on this SDK directly, per this adapter's whole reason for
+// existing -- can still tell forbidden/unauthorized/rate-limited/etc.
+// failures apart with errors.Is, without needing to import
+// github.com/go-telegram/bot themselves.
+//
+// The original SDK error's text is kept in the returned error's message
+// for logging/forensics, but deliberately not chained with %w: callers
+// have no business (and no import) with which to unwrap into an
+// SDK-specific type.
+//
+// err == nil is not special-cased here -- every call site only invokes
+// mapError inside an `if err != nil` branch.
+func mapError(err error) error {
+	switch {
+	case tgbot.IsTooManyRequestsError(err):
+		return fmt.Errorf("%w (%s)", messenger.ErrorTooManyRequests, err)
+	case errors.Is(err, tgbot.ErrorForbidden):
+		return fmt.Errorf("%w (%s)", messenger.ErrorForbidden, err)
+	case errors.Is(err, tgbot.ErrorBadRequest):
+		return fmt.Errorf("%w (%s)", messenger.ErrorBadRequest, err)
+	case errors.Is(err, tgbot.ErrorUnauthorized):
+		return fmt.Errorf("%w (%s)", messenger.ErrorUnauthorized, err)
+	case errors.Is(err, tgbot.ErrorNotFound):
+		return fmt.Errorf("%w (%s)", messenger.ErrorNotFound, err)
+	case errors.Is(err, tgbot.ErrorConflict):
+		return fmt.Errorf("%w (%s)", messenger.ErrorConflict, err)
+	default:
+		return err
+	}
+}
+
 // SendMessage sends a text message to targetID and returns the resulting
 // MessageUpdate as reported by Telegram.
 func (a *Adapter) SendMessage(ctx context.Context, targetID string, content string) (*messenger.MessageUpdate, error) {
@@ -115,7 +151,7 @@ func (a *Adapter) SendMessage(ctx context.Context, targetID string, content stri
 		Text:   content,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("telegram: send message to %q: %w", targetID, err)
+		return nil, fmt.Errorf("telegram: send message to %q: %w", targetID, mapError(err))
 	}
 
 	update, err := toMessageUpdate(mes)
@@ -188,7 +224,7 @@ func (a *Adapter) SendAttachment(ctx context.Context, targetID string, content s
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("telegram: send %s to %q: %w", attachment.Type, targetID, err)
+		return nil, fmt.Errorf("telegram: send %s to %q: %w", attachment.Type, targetID, mapError(err))
 	}
 
 	update, err := toMessageUpdate(mes)
@@ -215,7 +251,7 @@ func (a *Adapter) EditMessageText(ctx context.Context, targetID string, msgID in
 		})
 	}
 	if err != nil {
-		return nil, fmt.Errorf("telegram: update message from chat %q - msgid %d: %w", targetID, msgID, err)
+		return nil, fmt.Errorf("telegram: update message from chat %q - msgid %d: %w", targetID, msgID, mapError(err))
 	}
 
 	update, err := toMessageUpdate(mes)
@@ -232,9 +268,12 @@ func (a *Adapter) DeleteMessage(ctx context.Context, targetID string, msgID int)
 		MessageID: msgID,
 	})
 	if err != nil {
-		return fmt.Errorf("telegram: delete message %d in %q: %w", msgID, targetID, err)
+		return fmt.Errorf("telegram: delete message %d in %q: %w", msgID, targetID, mapError(err))
 	}
 	if !ok {
+		// Telegram returned ok=false with no error -- not a failure the
+		// SDK reports through its own error sentinels, so there is
+		// nothing for mapError to classify here.
 		return fmt.Errorf("telegram: delete message %d in %q: not deleted", msgID, targetID)
 	}
 	return nil

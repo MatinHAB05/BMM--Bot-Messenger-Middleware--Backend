@@ -9,6 +9,7 @@ package messenger
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"time"
 )
@@ -99,3 +100,40 @@ type MessageUpdate struct {
 	// for a plain text SendMessage/EditMessageText result.
 	Attachment *AttachmentMeta
 }
+
+// Sentinel errors a MessengerClient implementation can wrap and return
+// from any of its methods, so callers that depend only on this package
+// -- never on a concrete engine's SDK (see the package doc comment) --
+// can still classify a failure with errors.Is(err, messenger.ErrorXxx)
+// instead of importing e.g. github.com/go-telegram/bot themselves to
+// check its own error sentinels. Each engine adapter is responsible for
+// mapping its SDK's errors onto these (see pkg/messenger/telegram's
+// mapError).
+var (
+	// ErrorForbidden means the engine has no access to perform the
+	// action, e.g. the user blocked the bot, or the bot was removed
+	// from the chat/channel/group.
+	ErrorForbidden = errors.New("messenger: forbidden")
+
+	// ErrorBadRequest means the request itself was malformed, e.g. an
+	// invalid target id or an unsupported parameter combination.
+	ErrorBadRequest = errors.New("messenger: bad request")
+
+	// ErrorUnauthorized means the engine rejected the bot's
+	// credentials (token, ...).
+	ErrorUnauthorized = errors.New("messenger: unauthorized")
+
+	// ErrorTooManyRequests means the engine is rate-limiting this bot.
+	// Callers should back off and retry rather than treat this as a
+	// permanent failure.
+	ErrorTooManyRequests = errors.New("messenger: too many requests")
+
+	// ErrorNotFound means the target of the request (chat, message,
+	// file, ...) no longer exists from the engine's point of view.
+	ErrorNotFound = errors.New("messenger: not found")
+
+	// ErrorConflict means the request conflicts with the engine's
+	// current state, e.g. two long-polling update loops running at
+	// once for the same bot token.
+	ErrorConflict = errors.New("messenger: conflict")
+)
