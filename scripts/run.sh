@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-echo "start build"
-go build .
-echo "finished successfully build"
+echo "start build app"
+go build ./cmd/app/
+echo "finished successfully build app"
 
-./messenger-backend.exe
+./app.exe
