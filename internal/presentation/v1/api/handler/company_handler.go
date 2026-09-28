@@ -118,7 +118,7 @@ func (h *CompanyHandler) SendRegistionrWithOTP(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.companyService.SendRegistionrWithOTP(c.Request.Context(), companyID,req)
+	resp, err := h.companyService.SendRegistionrWithOTP(c.Request.Context(), companyID, req)
 	if err != nil {
 		fail(c, err)
 		return

@@ -99,7 +99,7 @@ type linkchannelchatcompanyStrategy struct {
 // NewPhoneStrategy builds the Strategy for otp:phone:{phone} OTPs.
 
 func NewLinkChannelChatCompanyStrategy(ttl time.Duration, codeLength int, gen CodeGenerator) Strategy {
-	return &linkchannelchatcompanyStrategy{otpType: TypeLinkJustChnnel, ttl: ttl, codeLength: codeLength , gen: gen}
+	return &linkchannelchatcompanyStrategy{otpType: TypeLinkJustChnnel, ttl: ttl, codeLength: codeLength, gen: gen}
 }
 func (s *linkchannelchatcompanyStrategy) Type() Type { return s.otpType }
 

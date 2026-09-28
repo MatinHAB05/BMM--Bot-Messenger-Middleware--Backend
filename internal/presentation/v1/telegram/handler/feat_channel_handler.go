@@ -51,7 +51,7 @@ func (h *FeatChannelHandler) SetChannelPendingDeepStartChannelCommand(ctx contex
 		ReplyMarkup: models.InlineKeyboardMarkup{
 			InlineKeyboard: [][]models.InlineKeyboardButton{
 				{
-					{Text: "📢 Select & Add Channel", URL: fmt.Sprintf("https://t.me/%s?startchannel&admin=post_messages+edit_messages+delete_messages", strings.TrimPrefix(h.botUsername,"@"))},
+					{Text: "📢 Select & Add Channel", URL: fmt.Sprintf("https://t.me/%s?startchannel&admin=post_messages+edit_messages+delete_messages", strings.TrimPrefix(h.botUsername, "@"))},
 				},
 			},
 		},

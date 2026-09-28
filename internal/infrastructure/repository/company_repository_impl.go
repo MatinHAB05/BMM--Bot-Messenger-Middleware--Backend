@@ -22,7 +22,7 @@ func NewCompanyRepository(db database.Database) repository_contract.CompanyRepos
 }
 
 func (r *companyRepository) Create(ctx context.Context, company *entity.Company) error {
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	if err := db.GetGormDB().WithContext(ctx).Create(company).Error; err != nil {
@@ -37,7 +37,7 @@ func (r *companyRepository) Create(ctx context.Context, company *entity.Company)
 
 func (r *companyRepository) FindByID(ctx context.Context, id uint) (*entity.Company, error) {
 	var company entity.Company
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	err := db.GetGormDB().WithContext(ctx).Where("id = ?", id).First(&company).Error
@@ -53,7 +53,7 @@ func (r *companyRepository) FindByID(ctx context.Context, id uint) (*entity.Comp
 
 func (r *companyRepository) FindByCode(ctx context.Context, code string) (*entity.Company, error) {
 	var company entity.Company
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	err := db.GetGormDB().WithContext(ctx).Where("code = ?", code).First(&company).Error
@@ -68,7 +68,7 @@ func (r *companyRepository) FindByCode(ctx context.Context, code string) (*entit
 }
 
 func (r *companyRepository) Update(ctx context.Context, company *entity.Company) error {
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	res := db.GetGormDB().WithContext(ctx).Save(company)
@@ -90,7 +90,7 @@ func (r *companyRepository) Update(ctx context.Context, company *entity.Company)
 }
 
 func (r *companyRepository) Delete(ctx context.Context, id uint) error {
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	res := db.GetGormDB().WithContext(ctx).Delete(&entity.Company{}, "id = ?", id)

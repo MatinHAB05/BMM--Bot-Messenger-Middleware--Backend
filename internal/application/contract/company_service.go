@@ -15,6 +15,7 @@ type CompanyService interface {
 
 type SendRegistionrWithOTPRequest struct {
 	Roles []string `json:"roles" binding:"required"`
+	// Expiration string   `json:"expiration"  binding:"required"`
 }
 
 type SendRegistionrWithOTPResponse struct {

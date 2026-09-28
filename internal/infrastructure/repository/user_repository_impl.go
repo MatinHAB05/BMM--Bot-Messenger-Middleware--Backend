@@ -22,7 +22,7 @@ func NewUserRepository(db database.Database) repository_contract.UserRepository 
 }
 
 func (r *userRepository) Create(ctx context.Context, user *entity.User) error {
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	if err := db.GetGormDB().WithContext(ctx).Create(user).Error; err != nil {
@@ -37,7 +37,7 @@ func (r *userRepository) Create(ctx context.Context, user *entity.User) error {
 
 func (r *userRepository) FindByID(ctx context.Context, id uint) (*entity.User, error) {
 	var user entity.User
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	err := db.GetGormDB().WithContext(ctx).Where("id = ?", id).First(&user).Error
@@ -53,7 +53,7 @@ func (r *userRepository) FindByID(ctx context.Context, id uint) (*entity.User, e
 
 func (r *userRepository) FindByIDInCompany(ctx context.Context, companyID, id uint) (*entity.User, error) {
 	var user entity.User
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	err := db.GetGormDB().WithContext(ctx).Where("id = ? AND company_id = ?", id, companyID).First(&user).Error
@@ -69,7 +69,7 @@ func (r *userRepository) FindByIDInCompany(ctx context.Context, companyID, id ui
 
 func (r *userRepository) FindByUsername(ctx context.Context, username string) (*entity.User, error) {
 	var user entity.User
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	err := db.GetGormDB().WithContext(ctx).Where("username = ?", username).First(&user).Error
@@ -85,7 +85,7 @@ func (r *userRepository) FindByUsername(ctx context.Context, username string) (*
 
 func (r *userRepository) FindByUsernameInCompany(ctx context.Context, companyID uint, username string) (*entity.User, error) {
 	var user entity.User
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	err := db.GetGormDB().WithContext(ctx).Where("username = ? AND company_id = ?", username, companyID).First(&user).Error
@@ -103,7 +103,7 @@ func (r *userRepository) FindByUsernameInCompany(ctx context.Context, companyID 
 // unique -- for OTP-based passwordless login.
 func (r *userRepository) FindByIdentifier(ctx context.Context, identifier string) (*entity.User, error) {
 	var user entity.User
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	err := db.GetGormDB().WithContext(ctx).Where("email = ? OR phone = ? OR username = ?", identifier, identifier, identifier).First(&user).Error
@@ -119,7 +119,7 @@ func (r *userRepository) FindByIdentifier(ctx context.Context, identifier string
 
 func (r *userRepository) FindByIdentifierInCompany(ctx context.Context, companyID uint, identifier string) (*entity.User, error) {
 	var user entity.User
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	err := db.GetGormDB().WithContext(ctx).Where("(email = ? OR phone = ?) AND company_id = ?", identifier, identifier, companyID).First(&user).Error
@@ -139,7 +139,7 @@ func (r *userRepository) List(ctx context.Context, companyID uint, offset, limit
 		total int64
 	)
 
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	if err := db.GetGormDB().WithContext(ctx).Model(&entity.User{}).Where("company_id = ?", companyID).Count(&total).Error; err != nil {
@@ -154,7 +154,7 @@ func (r *userRepository) List(ctx context.Context, companyID uint, offset, limit
 }
 
 func (r *userRepository) Update(ctx context.Context, user *entity.User) error {
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	res := db.GetGormDB().WithContext(ctx).Save(user)
@@ -176,7 +176,7 @@ func (r *userRepository) Update(ctx context.Context, user *entity.User) error {
 }
 
 func (r *userRepository) Delete(ctx context.Context, companyID, id uint) error {
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	res := db.GetGormDB().WithContext(ctx).Where("company_id = ?", companyID).Delete(&entity.User{}, "id = ?", id)
@@ -192,7 +192,7 @@ func (r *userRepository) Delete(ctx context.Context, companyID, id uint) error {
 
 func (r *userRepository) ExistsByUsername(ctx context.Context, companyID uint, username string) (*bool, error) {
 	var count int64
-	 db := database.ExtractTrxOrDB(ctx, r.db)
+	db := database.ExtractTrxOrDB(ctx, r.db)
 	// db := r.db
 
 	if err := db.GetGormDB().WithContext(ctx).Model(&entity.User{}).Where("company_id = ? AND username = ?", companyID, username).Count(&count).Error; err != nil {
