@@ -31,7 +31,7 @@ func RegisterAttachmentRoutes(v1 *gin.RouterGroup, deps Dependencies) {
 	attachments.DELETE("/:id", deps.AttachmentHandler.DeleteAttachmentByID)
 	attachments.POST("/:id/restore", deps.AttachmentHandler.RestoreAttachmentByID)
 
-	attachments.POST("/:id/links/download", deps.BatchGetDownloadLinksAttachmentsByAttachmentID)
+	attachments.POST("/:id/links/download", deps.GetDownloadLinksAttachmentsByAttachmentID)
 	attachments.POST("/:id/links/download/batch", deps.BatchGetDownloadLinksAttachmentsByAttachmentID)
 
 	// Nested under a single message (chat history row): creating and

@@ -92,13 +92,18 @@ type EmailConfig struct {
 }
 
 type S3Config struct {
-	Endpoint        string `json:"endpoint" mapstructure:"MINIO_ENDPOINT"`
-	AccessKeyID     string `json:"access_key_id" mapstructure:"MINIO_ACCESS_KEY_ID"`
-	SecretAccessKey string `json:"secret_access_key" mapstructure:"MINIO_SECRET_ACCESS_KEY"`
-	UseSSL          bool   `json:"use_ssl" mapstructure:"MINIO_USE_SSL"`
-	Region          string `json:"region" mapstructure:"MINIO_REGION"`
-	Bucket          string `json:"bucket" mapstructure:"MINIO_BUCKET"`
-	MaxConcurrency  int    `json:"max_currency" mapstructure:"MINIO_MAX_CURRENCY"`
+	Endpoint        string `json:"endpoint" mapstructure:"RUSTFS_ENDPOINT"`
+	AccessKeyID     string `json:"access_key_id" mapstructure:"RUSTFS_ACCESS_KEY_ID"`
+	SecretAccessKey string `json:"secret_access_key" mapstructure:"RUSTFS_SECRET_ACCESS_KEY"`
+	UseSSL          bool   `json:"use_ssl" mapstructure:"RUSTFS_USE_SSL"`
+	Region          string `json:"region" mapstructure:"RUSTFS_REGION"`
+	Bucket          string `json:"bucket" mapstructure:"RUSTFS_BUCKET"`
+	MaxConcurrency  int    `json:"max_currency" mapstructure:"RUSTFS_MAX_CURRENCY"`
+}
+
+type AttachmentConfig struct {
+	MaxBroadcastAttachmentFileSize int `json:"max_broadcast_attachment_file_size" mapstructure:"ATTACHMENT_MAX_BROADCAST_ATTACHMENT_FILE_SIZE"` // ? : -1 === no limits
+	MaxBroadcastAttachmentFiles    int `json:"max_broadcast_attachment_files" mapstructure:"ATTACHMENT_MAX_BROADCAST_ATTACHMENT_FILES"`         // ? : -1 === no limits
 }
 
 type Environment struct {
@@ -115,6 +120,7 @@ type Environment struct {
 	Migration  MigrationConfig  `mapstructure:",squash" json:"migration"`
 	Email      EmailConfig      `mapstructure:",squash" json:"email"`
 	S3         S3Config         `mapstructure:",squash" json:"s3"`
+	Attachment AttachmentConfig `mapstructure:",squash" json:"attachment"`
 }
 
 func LoadEnvironment() *Environment {
@@ -133,12 +139,24 @@ func LoadEnvironment() *Environment {
 		log.Fatalf("Failed to unmarshal environment config: %v", err)
 	}
 
-	rawChats, err := os.ReadFile("./adminchats.env.json")
-	if err != nil {
-		log.Fatalf("Failed to read-admin-chats: %v", err)
+	adminChatsFile := getEnv("ADMIN_CHATS_FILE_PATH", "./adminchats.env.json")
+	fileInfo, statErr := os.Stat(adminChatsFile)
+	if statErr != nil || fileInfo.IsDir() {
+		if statErr != nil && os.IsNotExist(statErr) {
+			log.Printf("Warning: admin chats file %q not found, defaulting to empty chats list []", adminChatsFile)
+		} else if fileInfo != nil && fileInfo.IsDir() {
+			log.Printf("Warning: admin chats file %q is a directory, defaulting to empty chats list []", adminChatsFile)
+		} else if statErr != nil {
+			log.Printf("Warning: could not stat admin chats file %q (%v), defaulting to empty chats list []", adminChatsFile, statErr)
+		}
+		env.SuperAdmin.Chats = "[]"
+	} else {
+		rawChats, err := os.ReadFile(adminChatsFile)
+		if err != nil {
+			log.Fatalf("Failed to read-admin-chats from %q: %v", adminChatsFile, err)
+		}
+		env.SuperAdmin.Chats = string(rawChats)
 	}
-	chats := string(rawChats)
-	env.SuperAdmin.Chats = chats
 
 	printConfig(&env)
 

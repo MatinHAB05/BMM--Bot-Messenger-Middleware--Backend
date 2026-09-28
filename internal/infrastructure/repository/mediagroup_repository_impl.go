@@ -42,7 +42,7 @@ func parseChatHistoryID(val string) (uint, error) {
 // previous value, and (re)starts the TTL.
 func (r *MediaGroupRepository) Set(ctx context.Context, mediaGroupID string, chatID string, chatHistoryID uint, ttl time.Duration) error {
 	key := mediaGroupKeyFunc(mediaGroupID, chatID)
-	if err := r.redisClient.GetRDB().Set(ctx, key, formatChatHistoryID(chatHistoryID), ttl).Err(); err != nil {
+	if err := r.rdb(ctx).Set(ctx, key, formatChatHistoryID(chatHistoryID), ttl).Err(); err != nil {
 		return fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
 	}
 	return nil
@@ -52,7 +52,7 @@ func (r *MediaGroupRepository) Set(ctx context.Context, mediaGroupID string, cha
 // exception.ErrMediaGroupMsgNotFound if there is none.
 func (r *MediaGroupRepository) Get(ctx context.Context, mediaGroupID string, chatID string) (uint, error) {
 	key := mediaGroupKeyFunc(mediaGroupID, chatID)
-	val, err := r.redisClient.GetRDB().Get(ctx, key).Result()
+	val, err := r.rdb(ctx).Get(ctx, key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return 0, exception.ErrMediaGroupMsgNotFound
@@ -65,7 +65,7 @@ func (r *MediaGroupRepository) Get(ctx context.Context, mediaGroupID string, cha
 
 func (r *MediaGroupRepository) Exists(ctx context.Context, mediaGroupID string, chatID string) (bool, error) {
 	key := mediaGroupKeyFunc(mediaGroupID, chatID)
-	count, err := r.redisClient.GetRDB().Exists(ctx, key).Result()
+	count, err := r.rdb(ctx).Exists(ctx, key).Result()
 	if err != nil {
 		return false, fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
 	}
@@ -74,7 +74,7 @@ func (r *MediaGroupRepository) Exists(ctx context.Context, mediaGroupID string, 
 
 func (r *MediaGroupRepository) Delete(ctx context.Context, mediaGroupID string, chatID string) error {
 	key := mediaGroupKeyFunc(mediaGroupID, chatID)
-	res := r.redisClient.GetRDB().Del(ctx, key)
+	res := r.rdb(ctx).Del(ctx, key)
 	if err := res.Err(); err != nil {
 		return fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
 	}
@@ -88,7 +88,7 @@ func (r *MediaGroupRepository) Delete(ctx context.Context, mediaGroupID string, 
 
 func (r *MediaGroupRepository) GetAndDelete(ctx context.Context, mediaGroupID string, chatID string) (uint, error) {
 	key := mediaGroupKeyFunc(mediaGroupID, chatID)
-	val, err := r.redisClient.GetRDB().GetDel(ctx, key).Result()
+	val, err := r.rdb(ctx).GetDel(ctx, key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return 0, exception.ErrMediaGroupMsgNotFound
@@ -107,7 +107,7 @@ func (r *MediaGroupRepository) GetAndDelete(ctx context.Context, mediaGroupID st
 func (r *MediaGroupRepository) ForceGet(ctx context.Context, mediaGroupID string, chatID string, chatHistoryID uint, ttl time.Duration) (uint, error) {
 	key := mediaGroupKeyFunc(mediaGroupID, chatID)
 
-	claimed, err := r.redisClient.GetRDB().SetNX(ctx, key, formatChatHistoryID(chatHistoryID), ttl).Result()
+	claimed, err := r.rdb(ctx).SetNX(ctx, key, formatChatHistoryID(chatHistoryID), ttl).Result()
 	if err != nil {
 		return 0, fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
 	}
@@ -120,7 +120,7 @@ func (r *MediaGroupRepository) ForceGet(ctx context.Context, mediaGroupID string
 
 func (r *MediaGroupRepository) TTL(ctx context.Context, mediaGroupID string, chatID string) (time.Duration, error) {
 	key := mediaGroupKeyFunc(mediaGroupID, chatID)
-	ttl, err := r.redisClient.GetRDB().TTL(ctx, key).Result()
+	ttl, err := r.rdb(ctx).TTL(ctx, key).Result()
 	if err != nil {
 		return 0, fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
 	}
@@ -132,4 +132,21 @@ func (r *MediaGroupRepository) TTL(ctx context.Context, mediaGroupID string, cha
 	}
 
 	return ttl, nil
+}
+
+func (r *MediaGroupRepository) rdb(ctx context.Context) redis.Cmdable {
+	return redisApt.ExtractTrxOrCache(ctx, r.redisClient).GetRDB()
+}
+
+// Key exposes the key this repo uses for (mediaGroupID, chatID) (for WithWatch).
+func (r *MediaGroupRepository) Key(mediaGroupID string, chatID string) string {
+	return mediaGroupKeyFunc(mediaGroupID, chatID)
+}
+
+// Remove deletes the key without inspecting the reply (safe in a trx write phase).
+func (r *MediaGroupRepository) Remove(ctx context.Context, mediaGroupID string, chatID string) error {
+	if err := r.rdb(ctx).Del(ctx, mediaGroupKeyFunc(mediaGroupID, chatID)).Err(); err != nil {
+		return fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
+	}
+	return nil
 }

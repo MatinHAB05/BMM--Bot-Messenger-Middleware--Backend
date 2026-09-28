@@ -1,12 +1,10 @@
-package hash
+package hasher
 
-import (
-	"golang.org/x/crypto/bcrypt"
-)
+import "golang.org/x/crypto/bcrypt"
 
 type BcryptHasher struct{}
 
-func NewBcryptHasher() *BcryptHasher {
+func NewBcryptHasher() Hasher {
 	return &BcryptHasher{}
 }
 
@@ -19,3 +17,4 @@ func (b *BcryptHasher) Compare(password, hash string) error {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err
 }
+

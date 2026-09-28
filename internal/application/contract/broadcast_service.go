@@ -24,9 +24,9 @@ const (
 // BroadcastAttachmentFile is a single uploaded file within a broadcast's
 // attachment batch.
 type BroadcastAttachmentFile struct {
-	FileName    string
-	ContentType string
-	Data        []byte
+	FileName    string `json:"file_name"`
+	ContentType string `json:"content_type"`
+	Data        []byte `json:"data"`
 }
 
 // BroadcastAttachment is the attachment batch a caller adds to a
@@ -36,8 +36,8 @@ type BroadcastAttachmentFile struct {
 // same files out to every target chat concurrently, and each target
 // needs an independent read over the same bytes.
 type BroadcastAttachment struct {
-	Type  BroadcastAttachmentType
-	Files []BroadcastAttachmentFile
+	Type  BroadcastAttachmentType   `json:"type"`
+	Files []BroadcastAttachmentFile `json:"files"`
 }
 
 type BroadcastRequest struct {

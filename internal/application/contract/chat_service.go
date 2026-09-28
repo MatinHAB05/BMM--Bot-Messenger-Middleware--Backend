@@ -51,11 +51,11 @@ type UpdateChatRequest struct {
 
 // ChatListQuery carries GET /api/v1/chats' pagination and filters.
 type ChatListQuery struct {
-	Platform string
-	ChatType string
-	IsActive *bool
-	Page     int
-	PageSize int
+	Platform string `json:"platform,omitempty" form:"platform"`
+	ChatType string `json:"chat_type,omitempty" form:"chat_type"`
+	IsActive *bool  `json:"is_active,omitempty" form:"is_active"`
+	Page     int    `json:"page,omitempty" form:"page"`
+	PageSize int    `json:"page_size,omitempty" form:"page_size"`
 }
 
 // ChatResponse is the public representation of a Chat.

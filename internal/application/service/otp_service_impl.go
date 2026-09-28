@@ -12,6 +12,7 @@ import (
 	"messenger-backend/internal/domain/exception"
 	"messenger-backend/internal/domain/otp"
 	repository_contract "messenger-backend/internal/domain/repository"
+	redisApt "messenger-backend/internal/infrastructure/redis"
 	"messenger-backend/pkg/logger"
 )
 
@@ -21,6 +22,7 @@ import (
 // that type, so adding a new OTP type never touches this file.
 type otpService struct {
 	repo          repository_contract.OTPRepository
+	trx           redisApt.TrxManager
 	strategies    map[otp.Type]otp.Strategy
 	emailDelivery service_contract.EmailService
 	appEnv        string
@@ -36,6 +38,7 @@ type otpService struct {
 // module.
 func NewOTPService(
 	repo repository_contract.OTPRepository,
+	trx redisApt.TrxManager,
 	emailDelivery service_contract.EmailService,
 	appEnv string,
 	log logger.Logger,
@@ -55,6 +58,7 @@ func NewOTPService(
 
 	return &otpService{
 		repo:          repo,
+		trx:           trx,
 		emailDelivery: emailDelivery,
 		strategies:    reg,
 		appEnv:        appEnv,
@@ -115,7 +119,7 @@ func (s *otpService) SendOTP(ctx context.Context, identifier string, otpType otp
 			TTL: timeToPrettyFormat(ttl),
 		})
 		if err != nil {
-			s.log.Error(err, "email otp deliviery has failed[for now just debuging]", logger.Bool("ok", *ok))
+			s.log.Error(err, "email otp deliviery has failed[for now just debuging]", logger.Bool("ok", ok != nil && *ok))
 		}
 	case otp.TypePhone:
 		s.log.Info("phone otp deliviery not implemented yet")
@@ -183,27 +187,42 @@ func (s *otpService) IsVerified(ctx context.Context, identifier string, otpType 
 	return ok, err
 }
 
+// InvalidateIsVerified atomically checks-and-clears the "verified" flag: the
+// flag key is WATCHed, so two concurrent callers can't both consume it.
+// Returns true only if this call actually consumed a set flag.
 func (s *otpService) InvalidateIsVerified(ctx context.Context, identifier string, otpType otp.Type) (*bool, error) {
 	strat, err := s.strategyFor(otpType)
 	if err != nil {
 		return nil, err
 	}
 
-	// key := strat.Key(identifier, code)
 	key := strat.KeyWithID(identifier)
-	ok, err := s.repo.IsVerified(ctx, key)
+	var was bool
+
+	err = s.trx.WithWatch(ctx, []string{s.repo.VerifiedKey(key)},
+		func(trxCtx context.Context) error {
+			ok, err := s.repo.IsVerified(trxCtx, key)
+			if err != nil {
+				return exception.Wrap(exception.ErrInternal, err)
+			}
+			was = ok != nil && *ok
+			return nil
+		},
+		func(trxCtx context.Context) error {
+			if !was {
+				return nil
+			}
+			if err := s.repo.RemoveVerified(trxCtx, key); err != nil {
+				return exception.Wrap(exception.ErrInternal, err)
+			}
+			return nil
+		},
+	)
 	if err != nil {
-		return nil, exception.Wrap(exception.ErrInternal, err)
+		return nil, s.trxErr(err)
 	}
-	if ok != nil && *ok {
-		if err := s.repo.DeleteVerified(ctx, key); err != nil {
-			return nil, exception.Wrap(exception.ErrInternal, err)
-		}
-		ok := true
-		return &ok, nil
-	}
-	// ok => false
-	return ok, nil
+
+	return &was, nil
 }
 
 // InvalidateOTP does NOT run automatically after a successful
@@ -228,45 +247,87 @@ func (s *otpService) InvalidateOTP(ctx context.Context, identifier string, otpTy
 	return nil
 }
 
-// TODO : watch trx
+// InvalidateOTPAndSetVerified atomically burns the OTP and raises the
+// "verified" flag. The OTP key is WATCHed: if it disappears (or changes)
+// between the existence check and EXEC, nothing is written and the check is
+// retried, so an OTP can only ever be exchanged for a verified flag once.
 func (s *otpService) InvalidateOTPAndSetVerified(ctx context.Context, identifier string, otpType otp.Type, code string) error {
 	strat, err := s.strategyFor(otpType)
 	if err != nil {
 		return err
 	}
-	fmt.Println("hi0")
-	// key := strat.Key(identifier, code)
+
 	otpKey := strat.Key(identifier, code)
 	verKey := strat.KeyWithID(identifier)
-	fmt.Println("===", otpKey)
-	fmt.Println("===", verKey)
 
-	if err := s.repo.Delete(ctx, otpKey); err != nil {
-		if errors.Is(err, exception.ErrOTPNotFound) {
-			fmt.Println("hi")
-			return exception.ErrOTPNotFound
-		}
-		fmt.Println("hi2")
-		return exception.Wrap(exception.ErrInternal, err)
+	err = s.trx.WithWatch(ctx, []string{otpKey},
+		func(trxCtx context.Context) error {
+			exists, err := s.repo.Exists(trxCtx, otpKey)
+			if err != nil {
+				return exception.Wrap(exception.ErrInternal, err)
+			}
+			if !exists {
+				return exception.ErrOTPNotFound
+			}
+			return nil
+		},
+		func(trxCtx context.Context) error {
+			if err := s.repo.Remove(trxCtx, otpKey); err != nil {
+				return exception.Wrap(exception.ErrInternal, err)
+			}
+			if err := s.repo.SetVerfied(trxCtx, verKey, strat.DefaultTTL()); err != nil {
+				return exception.Wrap(exception.ErrInternal, err)
+			}
+			return nil
+		},
+	)
+	if err != nil {
+		return s.trxErr(err)
 	}
-	if err := s.repo.SetVerfied(ctx, verKey, strat.DefaultTTL()); err != nil {
-		fmt.Println("hi3")
-		return exception.Wrap(exception.ErrInternal, err)
-	}
-	fmt.Println("hi4")
 	return nil
 }
 
+// GetAndInvalidateOTP verifies the code and burns it in one atomic step:
+// the OTP key is WATCHed, so two concurrent submissions of the same code can't
+// both succeed (the loser retries, finds nothing, and gets ErrOTPInvalid).
 func (s *otpService) GetAndInvalidateOTP(ctx context.Context, identifier string, otpType otp.Type, code string) (otp.Payload, error) {
-	payload, err := s.VerifyOTP(ctx, identifier, otpType, code)
+	strat, err := s.strategyFor(otpType)
 	if err != nil {
 		return nil, err
 	}
-	err = s.InvalidateOTP(ctx, identifier, otpType, code)
+
+	key := strat.Key(identifier, code)
+	var payload otp.Payload
+
+	err = s.trx.WithWatch(ctx, []string{key},
+		func(trxCtx context.Context) error {
+			p, err := s.VerifyOTP(trxCtx, identifier, otpType, code)
+			if err != nil {
+				return err
+			}
+			payload = p
+			return nil
+		},
+		func(trxCtx context.Context) error {
+			if err := s.repo.Remove(trxCtx, key); err != nil {
+				return exception.Wrap(exception.ErrInternal, err)
+			}
+			return nil
+		},
+	)
 	if err != nil {
-		return nil, err
+		return nil, s.trxErr(err)
 	}
 	return payload, nil
+}
+
+// trxErr maps "watch retries exhausted" to an internal error; every other
+// error already carries the right domain/internal wrapping.
+func (s *otpService) trxErr(err error) error {
+	if errors.Is(err, redisApt.ErrTrxConflict) {
+		return exception.Wrap(exception.ErrInternal, err)
+	}
+	return err
 }
 
 func (s *otpService) TTL(ctx context.Context, identifier string, otpType otp.Type, code string) (time.Duration, error) {

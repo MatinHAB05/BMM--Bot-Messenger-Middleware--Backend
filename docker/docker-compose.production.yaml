@@ -1,28 +1,53 @@
-version: "3.9"
-# todo to sync it
 services:
   app:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    container_name: messenger-backend
+    image: messenger-backend:latest
+    container_name: messenger-backend-app
     restart: unless-stopped
     ports:
       - "${PORT:-8080}:8080"
     env_file:
       - ../.env
     environment:
-      # Override host-oriented .env values with in-network service names.
+      # Production overrides for internal docker network
+      APP_ENV: production
+      PORT: 8080
       DB_HOST: postgres
-      REDIS_ADDR: redis:6379
+      DB_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RUSTFS_ENDPOINT: rustfs:9000
+      RUSTFS_USE_SSL: "false"
+      DATABASE_MIGRATION_DIR_PATH: "./migrations"
+      CASBIN_CONF_FILE_PATH: "./config/rbac_model.conf"
+      LOG_DIR_FILE_PATH: "./logs/app"
+      LOG_DIR_FILE_PATH_CLEAN: "./clean-logs/app"
+      LOG_ERR_DIR_FILE_PATH: "./logs/error"
+      LOG_ERR_DIR_FILE_PATH_CLEAN: "./clean-logs/error"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      rustfs:
+        condition: service_healthy
     volumes:
       - ../logs:/app/logs
       - ../clean-logs:/app/clean-logs
+      - ../adminchats.env.json:/app/adminchats.env.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
     networks:
       - messenger-backend
 
@@ -35,14 +60,21 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-messenger_backend}
     ports:
-      - "${DB_PORT:-5432}:5432"
+      # Bound to 127.0.0.1 in production to prevent unintended public internet exposure
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-messenger_backend}"]
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
     networks:
       - messenger-backend
 
@@ -50,21 +82,67 @@ services:
     image: redis:7-alpine
     container_name: messenger-backend-redis
     restart: unless-stopped
+    command: >
+      sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then
+        exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes --save 60 1;
+      else
+        exec redis-server --appendonly yes --save 60 1;
+      fi'
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      # Bound to 127.0.0.1 in production to prevent unintended public internet exposure
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG; else redis-cli ping | grep -q PONG; fi"]
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+    networks:
+      - messenger-backend
+
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: messenger-backend-rustfs
+    restart: unless-stopped
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY_ID:-adminadminadmin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_ACCESS_KEY:-adminadminadmin}
+      RUSTFS_ADDRESS: "0.0.0.0:9000"
+      RUSTFS_CONSOLE_ADDRESS: "0.0.0.0:9001"
+      RUSTFS_CONSOLE_ENABLE: "true"
+    ports:
+      # Bound to 127.0.0.1 in production to prevent unintended public internet exposure
+      - "127.0.0.1:${RUSTFS_API_PORT:-9000}:9000" # API
+      - "127.0.0.1:${RUSTFS_CONSOLE_PORT:-9001}:9001" # WebUI Console
+    volumes:
+      - rustfs_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || wget -qO- http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
     networks:
       - messenger-backend
 
 volumes:
   postgres_data:
   redis_data:
+  rustfs_data:
 
 networks:
   messenger-backend:

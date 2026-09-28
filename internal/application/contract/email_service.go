@@ -19,7 +19,7 @@ type SendEmailRequest struct {
 }
 
 type SendOTPEmailRequest struct {
-	To         []string `json:"to" binding:"required,email"`
-	OTP        string
-	TTL string
+	To  []string `json:"to" binding:"required,email"`
+	OTP string   `json:"otp"`
+	TTL string   `json:"ttl"`
 }

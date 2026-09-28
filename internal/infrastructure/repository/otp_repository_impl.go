@@ -36,7 +36,7 @@ func NewOTPRepository(redisClient redisApt.Cache) repository_contract.OTPReposit
 }
 
 func (r *otpRepository) Save(ctx context.Context, key string, payload []byte, ttl time.Duration) error {
-	if err := r.redisClient.GetRDB().Set(ctx, key, payload, ttl).Err(); err != nil {
+	if err := r.rdb(ctx).Set(ctx, key, payload, ttl).Err(); err != nil {
 		return fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
 	}
 	return nil
@@ -47,7 +47,7 @@ func verifedKey(key string) string {
 }
 
 func (r *otpRepository) SetVerfied(ctx context.Context, key string, ttl time.Duration) error {
-	if err := r.redisClient.GetRDB().Set(ctx, verifedKey(key), true, ttl).Err(); err != nil {
+	if err := r.rdb(ctx).Set(ctx, verifedKey(key), true, ttl).Err(); err != nil {
 		return fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
 	}
 	return nil
@@ -55,7 +55,7 @@ func (r *otpRepository) SetVerfied(ctx context.Context, key string, ttl time.Dur
 
 func (r *otpRepository) IsVerified(ctx context.Context, key string) (*bool, error) {
 	var is bool
-	val, err := r.redisClient.GetRDB().Get(ctx, verifedKey(key)).Result()
+	val, err := r.rdb(ctx).Get(ctx, verifedKey(key)).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			is := false
@@ -68,7 +68,7 @@ func (r *otpRepository) IsVerified(ctx context.Context, key string) (*bool, erro
 }
 
 func (r *otpRepository) Get(ctx context.Context, key string) ([]byte, error) {
-	val, err := r.redisClient.GetRDB().Get(ctx, key).Bytes()
+	val, err := r.rdb(ctx).Get(ctx, key).Bytes()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return nil, exception.ErrOTPNotFound
@@ -79,7 +79,7 @@ func (r *otpRepository) Get(ctx context.Context, key string) ([]byte, error) {
 }
 
 func (r *otpRepository) Delete(ctx context.Context, key string) error {
-	res := r.redisClient.GetRDB().Del(ctx, key)
+	res := r.rdb(ctx).Del(ctx, key)
 	if err := res.Err(); err != nil {
 		return fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
 	}
@@ -92,7 +92,7 @@ func (r *otpRepository) Delete(ctx context.Context, key string) error {
 }
 
 func (r *otpRepository) DeleteVerified(ctx context.Context, key string) error {
-	res := r.redisClient.GetRDB().Del(ctx, verifedKey(key))
+	res := r.rdb(ctx).Del(ctx, verifedKey(key))
 	if err := res.Err(); err != nil {
 		return fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
 	}
@@ -105,7 +105,7 @@ func (r *otpRepository) DeleteVerified(ctx context.Context, key string) error {
 }
 
 func (r *otpRepository) Exists(ctx context.Context, key string) (bool, error) {
-	count, err := r.redisClient.GetRDB().Exists(ctx, key).Result()
+	count, err := r.rdb(ctx).Exists(ctx, key).Result()
 	if err != nil {
 		return false, fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
 	}
@@ -113,7 +113,7 @@ func (r *otpRepository) Exists(ctx context.Context, key string) (bool, error) {
 }
 
 func (r *otpRepository) TTL(ctx context.Context, key string) (time.Duration, error) {
-	ttl, err := r.redisClient.GetRDB().TTL(ctx, key).Result()
+	ttl, err := r.rdb(ctx).TTL(ctx, key).Result()
 	if err != nil {
 		return 0, fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
 	}
@@ -126,4 +126,30 @@ func (r *otpRepository) TTL(ctx context.Context, key string) (time.Duration, err
 	}
 
 	return ttl, nil
+}
+
+func (r *otpRepository) rdb(ctx context.Context) redis.Cmdable {
+	return redisApt.ExtractTrxOrCache(ctx, r.redisClient).GetRDB()
+}
+
+// VerifiedKey exposes the key under which the "verified" flag of an OTP key
+// is stored (for WithWatch). The OTP key itself comes from the otp.Strategy.
+func (r *otpRepository) VerifiedKey(key string) string {
+	return verifedKey(key)
+}
+
+// Remove deletes the OTP key without inspecting the reply (safe in a trx write phase).
+func (r *otpRepository) Remove(ctx context.Context, key string) error {
+	if err := r.rdb(ctx).Del(ctx, key).Err(); err != nil {
+		return fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
+	}
+	return nil
+}
+
+// RemoveVerified deletes the "verified" flag without inspecting the reply.
+func (r *otpRepository) RemoveVerified(ctx context.Context, key string) error {
+	if err := r.rdb(ctx).Del(ctx, verifedKey(key)).Err(); err != nil {
+		return fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
+	}
+	return nil
 }

@@ -27,7 +27,7 @@ func sentBaleMsgKeyFunc(baleChatID string, contentHash string) string {
 
 func (r *sentBaleMsgRepository) Set(ctx context.Context, baleChatID string, contentHash string, ttl time.Duration) error {
 	key := sentBaleMsgKeyFunc(baleChatID, contentHash)
-	if err := r.redisClient.GetRDB().Set(ctx, key, true, ttl).Err(); err != nil {
+	if err := r.rdb(ctx).Set(ctx, key, true, ttl).Err(); err != nil {
 		return fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
 	}
 	return nil
@@ -35,7 +35,7 @@ func (r *sentBaleMsgRepository) Set(ctx context.Context, baleChatID string, cont
 
 func (r *sentBaleMsgRepository) Get(ctx context.Context, baleChatID string, contentHash string) (bool, error) {
 	key := sentBaleMsgKeyFunc(baleChatID, contentHash)
-	val, err := r.redisClient.GetRDB().Get(ctx, key).Bool()
+	val, err := r.rdb(ctx).Get(ctx, key).Bool()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return false, exception.ErrSentBaleMsgNotFound
@@ -48,7 +48,7 @@ func (r *sentBaleMsgRepository) Get(ctx context.Context, baleChatID string, cont
 
 func (r *sentBaleMsgRepository) Exists(ctx context.Context, baleChatID string, contentHash string) (bool, error) {
 	key := sentBaleMsgKeyFunc(baleChatID, contentHash)
-	count, err := r.redisClient.GetRDB().Exists(ctx, key).Result()
+	count, err := r.rdb(ctx).Exists(ctx, key).Result()
 	if err != nil {
 		return false, fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
 	}
@@ -57,7 +57,7 @@ func (r *sentBaleMsgRepository) Exists(ctx context.Context, baleChatID string, c
 
 func (r *sentBaleMsgRepository) Delete(ctx context.Context, baleChatID string, contentHash string) error {
 	key := sentBaleMsgKeyFunc(baleChatID, contentHash)
-	res := r.redisClient.GetRDB().Del(ctx, key)
+	res := r.rdb(ctx).Del(ctx, key)
 	if err := res.Err(); err != nil {
 		return fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
 	}
@@ -71,7 +71,7 @@ func (r *sentBaleMsgRepository) Delete(ctx context.Context, baleChatID string, c
 
 func (r *sentBaleMsgRepository) TTL(ctx context.Context, baleChatID string, contentHash string) (time.Duration, error) {
 	key := sentBaleMsgKeyFunc(baleChatID, contentHash)
-	ttl, err := r.redisClient.GetRDB().TTL(ctx, key).Result()
+	ttl, err := r.rdb(ctx).TTL(ctx, key).Result()
 	if err != nil {
 		return 0, fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
 	}
@@ -82,4 +82,21 @@ func (r *sentBaleMsgRepository) TTL(ctx context.Context, baleChatID string, cont
 	}
 
 	return ttl, nil
+}
+
+func (r *sentBaleMsgRepository) rdb(ctx context.Context) redis.Cmdable {
+	return redisApt.ExtractTrxOrCache(ctx, r.redisClient).GetRDB()
+}
+
+// Key exposes the key this repo uses for (baleChatID, contentHash) (for WithWatch).
+func (r *sentBaleMsgRepository) Key(baleChatID string, contentHash string) string {
+	return sentBaleMsgKeyFunc(baleChatID, contentHash)
+}
+
+// Remove deletes the key without inspecting the reply (safe in a trx write phase).
+func (r *sentBaleMsgRepository) Remove(ctx context.Context, baleChatID string, contentHash string) error {
+	if err := r.rdb(ctx).Del(ctx, sentBaleMsgKeyFunc(baleChatID, contentHash)).Err(); err != nil {
+		return fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
+	}
+	return nil
 }

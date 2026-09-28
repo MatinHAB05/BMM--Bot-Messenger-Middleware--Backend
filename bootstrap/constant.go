@@ -28,11 +28,17 @@ type BotConstants struct {
 	ListenerRestartDelay time.Duration `json:"listener_restart_delay"`
 }
 
+type RedisConstants struct {
+	MaxRetries int
+	Backoff    time.Duration
+}
+
 // AppConstants holds all categorized static values
 type Constants struct {
 	Server ServerConstants `json:"server"`
 	Auth   AuthDefaults    `json:"auth"`
 	Paths  PathConstants   `json:"paths"`
+	Redis  RedisConstants  `json:"redis"`
 	Bot    BotConstants    `json:"bot"`
 }
 
@@ -51,6 +57,10 @@ func LoadNewConstants() *Constants {
 		Paths: PathConstants{},
 		Bot: BotConstants{
 			ListenerRestartDelay: 5 * time.Second,
+		},
+		Redis: RedisConstants{
+			MaxRetries: 5,
+			Backoff:    5 * time.Millisecond,
 		},
 	}
 	PrintConstants(&cons)

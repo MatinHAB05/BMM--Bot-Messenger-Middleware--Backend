@@ -11,11 +11,10 @@ import (
 	"messenger-backend/internal/domain/paseto"
 	repository_contract "messenger-backend/internal/domain/repository"
 	"messenger-backend/internal/infrastructure/database"
+	"messenger-backend/pkg/hasher"
 	"messenger-backend/pkg/logger"
 	"strconv"
 	"time"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthServiceConfig struct {
@@ -37,6 +36,7 @@ type authService struct {
 	otpService  service_contract.OTPService
 	tokenMaker  paseto.Maker
 	trxManager  database.TrxManager
+	hasher      hasher.Hasher
 
 	log logger.Logger
 	*AuthServiceConfig
@@ -50,6 +50,7 @@ func NewAuthService(
 	otpService service_contract.OTPService,
 	trxManager database.TrxManager,
 	tokenMaker paseto.Maker,
+	hasher hasher.Hasher,
 	log logger.Logger,
 	cfg *AuthServiceConfig,
 ) service_contract.AuthService {
@@ -61,6 +62,7 @@ func NewAuthService(
 		otpService:        otpService,
 		rbacRepo:          rbacRepo,
 		trxManager:        trxManager,
+		hasher:            hasher,
 		log:               log.With(logger.String("component", "auth_service")),
 		AuthServiceConfig: cfg,
 	}
@@ -115,7 +117,7 @@ func (s *authService) loginWithPassword(ctx context.Context, username, password 
 		return nil, err
 	}
 
-	if user.PasswordHash == "" || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
+	if user.PasswordHash == "" || s.hasher.Compare(password, user.PasswordHash) != nil {
 		return nil, exception.ErrInvalidCredentials
 	}
 
@@ -175,15 +177,16 @@ func (s *authService) RegisterMeWithCompany(ctx context.Context, req service_con
 	var u *entity.User
 	err := s.trxManager.WithTransaction(ctx, func(trxCtx context.Context) error {
 		c = &entity.Company{
-			Name:     req.Company.Name,
-			Code:     req.Company.Code,
-			IsActive: true,
+			Name:        req.Company.Name,
+			Code:        req.Company.Code,
+			Description: req.Company.Description,
+			IsActive:    true,
 		}
 		if err := s.companyRepo.Create(ctx, c); err != nil {
 			return err
 		}
 
-		hash, err := bcrypt.GenerateFromPassword([]byte(req.Me.Password), bcrypt.DefaultCost)
+		hash, err := s.hasher.Hash(req.Me.Password)
 		if err != nil {
 			return err
 		}
@@ -192,6 +195,8 @@ func (s *authService) RegisterMeWithCompany(ctx context.Context, req service_con
 			PasswordHash: string(hash),
 			IsActive:     true,
 			CompanyID:    c.ID,
+			Firstname:    req.Me.Firstname,
+			Lastname:     req.Me.Lastname,
 		}
 
 		if req.Me.Email == "" && req.Me.Phone == "" {
@@ -309,7 +314,7 @@ func (s *authService) RegisterWithOTP(ctx context.Context, req service_contract.
 			return err
 		}
 
-		hash, err := bcrypt.GenerateFromPassword([]byte(req.Me.Password), bcrypt.DefaultCost)
+		hash, err := s.hasher.Hash(req.Me.Password)
 		if err != nil {
 			return err
 		}
@@ -318,6 +323,8 @@ func (s *authService) RegisterWithOTP(ctx context.Context, req service_contract.
 			PasswordHash: string(hash),
 			IsActive:     true,
 			CompanyID:    c.ID,
+			Firstname:    req.Me.Firstname,
+			Lastname:     req.Me.Lastname,
 		}
 
 		if req.Me.Email == "" && req.Me.Phone == "" {
@@ -426,8 +433,6 @@ func (s *authService) checkCrdentionls(ctx context.Context, email, phone, userna
 	ok := true
 	return &ok, nil
 }
-
-//TODO
 
 func (s *authService) SendOTP(ctx context.Context, identifier, otpType string) (*service_contract.SendAuthOTPResponse, error) {
 	if !(otpType == otp.TypeEmail.String() || otpType == otp.TypePhone.String()) {

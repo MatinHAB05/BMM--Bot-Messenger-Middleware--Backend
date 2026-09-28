@@ -20,18 +20,22 @@ type UserService interface {
 }
 
 type CreateUserRequest struct {
-	Username string   `json:"username" binding:"required,min=3,max=64"`
-	Password string   `json:"password" binding:"omitempty,min=6"`
-	Phone    string   `json:"phone"`
-	Email    string   `json:"email" binding:"required,email"`
-	Roles    []string `json:"roles"`
+	Username  string   `json:"username" binding:"required,min=3,max=64"`
+	Password  string   `json:"password" binding:"omitempty,min=6"`
+	Phone     string   `json:"phone"`
+	Email     string   `json:"email" binding:"required,email"`
+	Roles     []string `json:"roles"`
+	Firstname string   `json:"firstname" binding:"omitempty,min=2,max=64"`
+	Lastname  string   `json:"lastname" binding:"omitempty,min=2,max=64"`
 }
 
 type CreateMeUserRequest struct {
-	Username string `json:"username" binding:"required,min=3,max=64"`
-	Password string `json:"password" binding:"omitempty,min=6"`
-	Phone    string `json:"phone" binding:"omitempty"`
-	Email    string `json:"email" binding:"omitempty,email"`
+	Username  string `json:"username" binding:"required,min=3,max=64"`
+	Password  string `json:"password" binding:"omitempty,min=6"`
+	Phone     string `json:"phone" binding:"omitempty"`
+	Email     string `json:"email" binding:"omitempty,email"`
+	Firstname string `json:"firstname" binding:"omitempty,min=2,max=64"`
+	Lastname  string `json:"lastname" binding:"omitempty,min=2,max=64"`
 }
 
 type UpdateUserRolesRequest struct {
@@ -39,7 +43,9 @@ type UpdateUserRolesRequest struct {
 }
 
 type UpdateUserRequest struct {
-	IsActive *bool `json:"is_active"`
+	IsActive  *bool  `json:"is_active"`
+	Firstname string `json:"firstname" binding:"omitempty,min=2,max=64"`
+	Lastname  string `json:"lastname" binding:"omitempty,min=2,max=64"`
 }
 
 type UpdateUserEmailRequest struct {
@@ -55,15 +61,19 @@ type UpdateUserUsernameRequest struct {
 }
 
 type UserResponse struct {
-	ID        uint     `json:"id"`
-	CompanyID uint     `json:"company_id"`
-	Username  string   `json:"username"`
-	Phone     *string  `json:"phone,omitempty"`
-	Email     *string  `json:"email"`
-	IsActive  bool     `json:"is_active"`
-	Roles     []string `json:"roles"`
-	CreatedAt string   `json:"created_at"`
-	UpdatedAt string   `json:"updated_at"`
+	ID              uint     `json:"id"`
+	CompanyID       uint     `json:"company_id"`
+	Username        string   `json:"username"`
+	Firstname       string   `json:"firstname"`
+	Lastname        string   `json:"lastname"`
+	Phone           *string  `json:"phone,omitempty"`
+	Email           *string  `json:"email"`
+	IsActive        bool     `json:"is_active"`
+	IsEmailVerified bool     `json:"is_email_verified"`
+	IsPhoneVerified bool     `json:"is_phone_verified"`
+	Roles           []string `json:"roles"`
+	CreatedAt       string   `json:"created_at"`
+	UpdatedAt       string   `json:"updated_at"`
 }
 
 type UserListResponse struct {
@@ -75,14 +85,18 @@ type UserListResponse struct {
 
 func ToUserResponse(user *entity.User, roles []string) UserResponse {
 	return UserResponse{
-		ID:        user.ID,
-		Username:  user.Username,
-		Email:     user.Email,
-		IsActive:  user.IsActive,
-		Roles:     roles,
-		CreatedAt: user.CreatedAt.Format(timeLayout),
-		UpdatedAt: user.UpdatedAt.Format(timeLayout),
-		CompanyID: user.CompanyID,
-		Phone:     user.Phone,
+		ID:              user.ID,
+		Username:        user.Username,
+		Email:           user.Email,
+		IsActive:        user.IsActive,
+		Roles:           roles,
+		CreatedAt:       user.CreatedAt.Format(timeLayout),
+		UpdatedAt:       user.UpdatedAt.Format(timeLayout),
+		CompanyID:       user.CompanyID,
+		Phone:           user.Phone,
+		IsEmailVerified: user.IsVerifiedEmail,
+		IsPhoneVerified: user.IsVerifiedPhone,
+		Firstname:       user.Firstname,
+		Lastname:        user.Lastname,
 	}
 }

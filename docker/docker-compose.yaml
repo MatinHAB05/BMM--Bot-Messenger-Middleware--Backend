@@ -12,10 +12,15 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-messenger_backend}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 5s
     networks:
       - messenger-backend
 
@@ -23,68 +28,95 @@ services:
     image: redis:7-alpine
     container_name: messenger-backend-redis
     restart: unless-stopped
+    command: >
+      sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then
+        exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes;
+      else
+        exec redis-server --appendonly yes;
+      fi'
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+        [
+          "CMD-SHELL",
+          'if [ -n "$$REDIS_PASSWORD" ]; then redis-cli -a "$$REDIS_PASSWORD" ping | grep -q PONG; else redis-cli ping | grep -q PONG; fi',
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 5s
     networks:
       - messenger-backend
 
-  # rustfs:
-  #   image: rustfs/rustfs:latest
-  #   container_name: rustfs-local
-  #   restart: unless-stopped
-  #   ports:
-  #     - "9000:9000" # API
-  #     - "9001:9001" # WebUI
-  #   environment:
-  #     - RUSTFS_ACCESS_KEY=adminadminadmin
-  #     - RUSTFS_SECRET_KEY=adminadminadmin
-  #     - RUSTFS_ADDRESS=0.0.0.0:9000
-  #     - RUSTFS_CONSOLE_ADDRESS=0.0.0.0:9001
-  #     - RUSTFS_CONSOLE_ENABLE=true
-  #   volumes:
-  #     - rustfs_data:/data
-
-  # rustfs-cli:
-  #   image: rustfs/rc:latest
-  #   container_name: rustfs-cli
-  #   entrypoint: ["sleep", "infinity"]
-  #   depends_on:
-  # - rustfs
-
-  # todo : for just now(later replace it with rustfs)
-  minio:
-    image: minio/minio:latest
-    container_name: messenger-backend-minio
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: messenger-backend-rustfs
     restart: unless-stopped
-    command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY_ID:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_ACCESS_KEY:-minioadmin}
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY_ID:-adminadminadmin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_ACCESS_KEY:-adminadminadmin}
+      RUSTFS_ADDRESS: "0.0.0.0:9000"
+      RUSTFS_CONSOLE_ADDRESS: "0.0.0.0:9001"
+      RUSTFS_CONSOLE_ENABLE: "true"
     ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001" 
+      - "${RUSTFS_API_PORT:-9000}:9000" # API
+      - "${RUSTFS_CONSOLE_PORT:-9001}:9001" # WebUI Console
     volumes:
-      - minio_data:/data
+      - rustfs_data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://localhost:9000/minio/health/live || wget -qO- http://localhost:9000/minio/health/live || exit 1",
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 5s
+    networks:
+      - messenger-backend
+
+  # App service is optional in dev (run via: docker compose --profile full up)
+  # Default 'docker compose up' runs only dependencies so developers can run 'go run ./cmd/app' on host.
+  app:
+    profiles: ["app", "full"]
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: messenger-backend-app
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    env_file:
+      - ../.env
+    environment:
+      DB_HOST: postgres
+      REDIS_HOST: redis
+      RUSTFS_ENDPOINT: rustfs:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
+    volumes:
+      - ../logs:/app/logs
+      - ../clean-logs:/app/clean-logs
+      - ../config:/app/config:ro
+      - ../migrations:/app/migrations:ro
     networks:
       - messenger-backend
 
 volumes:
   postgres_data:
   redis_data:
-  # rustfs_data:
-  minio_data:
+  rustfs_data:
 
 networks:
   messenger-backend:

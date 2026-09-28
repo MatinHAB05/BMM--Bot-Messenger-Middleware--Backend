@@ -66,9 +66,9 @@ type ChatHistoryResponse struct {
 	MessageTimestamp  string `json:"message_timestamp"`
 	CreatedAt         string `json:"created_at"`
 
-	IsBroadcast    bool
-	BroadcastUUID  *uuid.UUID
-	HasAttachments bool
+	IsBroadcast    bool       `json:"is_broadcast"`
+	BroadcastUUID  *uuid.UUID `json:"broadcast_uuid"`
+	HasAttachments bool       `json:"has_attachments"`
 }
 
 // ChatHistoryDetailResponse is returned by GET .../history/:message_id.
@@ -92,20 +92,20 @@ type ChatHistoryListResponse struct {
 // writing the ChatHistory row) is business logic that lives in the
 // service layer, not the listener.
 type IngestedUpdate struct {
-	Platform          string
-	PlatformChatID    string
-	ChatTitle         string
-	ChatUsername      string
-	ChatType          string
-	IsPrivateChat     bool
-	PlatformMessageID int64
-	SenderID          string
-	SenderName        string
-	Content           string
-	MediaType         string
-	RawPayload        []byte
-	MessageTimestamp  time.Time
-	HasAttachments    bool
+	Platform          string    `json:"platform"`
+	PlatformChatID    string    `json:"platform_chat_id"`
+	ChatTitle         string    `json:"chat_title,omitempty"`
+	ChatUsername      string    `json:"chat_username,omitempty"`
+	ChatType          string    `json:"chat_type"`
+	IsPrivateChat     bool      `json:"is_private_chat"`
+	PlatformMessageID int64     `json:"platform_message_id"`
+	SenderID          string    `json:"sender_id,omitempty"`
+	SenderName        string    `json:"sender_name,omitempty"`
+	Content           string    `json:"content,omitempty"`
+	MediaType         string    `json:"media_type"`
+	RawPayload        []byte    `json:"raw_payload,omitempty"`
+	MessageTimestamp  time.Time `json:"message_timestamp"`
+	HasAttachments    bool      `json:"has_attachments"`
 }
 
 // ToChatHistoryResponse maps a persisted ChatHistory row into the

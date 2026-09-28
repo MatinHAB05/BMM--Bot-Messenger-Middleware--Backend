@@ -11,4 +11,6 @@ type SentBaleMsgRepository interface {
 	Exists(ctx context.Context, baleChatID string, contentHash string) (bool, error)
 	Delete(ctx context.Context, baleChatID string, contentHash string) error
 	TTL(ctx context.Context, baleChatID string, contentHash string) (time.Duration, error)
+	Key(baleChatID string, contentHash string) string
+	Remove(ctx context.Context, baleChatID string, contentHash string) error
 }

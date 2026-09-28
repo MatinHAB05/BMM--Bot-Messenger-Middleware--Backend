@@ -13,7 +13,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// TODO : redis trx manager for all redis base repos
 type ChannelPendingRepository struct {
 	redisClient redisApt.Cache
 }
@@ -28,7 +27,7 @@ func keyFunc(userID string) string {
 
 func (r *ChannelPendingRepository) Set(ctx context.Context, userID string, companyID uint, ttl time.Duration) error {
 	key := keyFunc(userID)
-	if err := r.redisClient.GetRDB().Set(ctx, key, companyID, ttl).Err(); err != nil {
+	if err := r.rdb(ctx).Set(ctx, key, companyID, ttl).Err(); err != nil {
 		return fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
 	}
 	return nil
@@ -36,7 +35,7 @@ func (r *ChannelPendingRepository) Set(ctx context.Context, userID string, compa
 
 func (r *ChannelPendingRepository) Get(ctx context.Context, userID string) (uint, error) {
 	key := keyFunc(userID)
-	val, err := r.redisClient.GetRDB().Get(ctx, key).Result()
+	val, err := r.rdb(ctx).Get(ctx, key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return 0, exception.ErrOTPNotFound
@@ -54,7 +53,7 @@ func (r *ChannelPendingRepository) Get(ctx context.Context, userID string) (uint
 
 func (r *ChannelPendingRepository) Exists(ctx context.Context, userID string) (bool, error) {
 	key := keyFunc(userID)
-	count, err := r.redisClient.GetRDB().Exists(ctx, key).Result()
+	count, err := r.rdb(ctx).Exists(ctx, key).Result()
 	if err != nil {
 		return false, fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
 	}
@@ -63,7 +62,7 @@ func (r *ChannelPendingRepository) Exists(ctx context.Context, userID string) (b
 
 func (r *ChannelPendingRepository) Delete(ctx context.Context, userID string) error {
 	key := keyFunc(userID)
-	res := r.redisClient.GetRDB().Del(ctx, key)
+	res := r.rdb(ctx).Del(ctx, key)
 	if err := res.Err(); err != nil {
 		return fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
 	}
@@ -72,5 +71,26 @@ func (r *ChannelPendingRepository) Delete(ctx context.Context, userID string) er
 		return exception.ErrOTPNotFound
 	}
 
+	return nil
+}
+
+// rdb returns the trx-aware Redis client: inside TrxManager.WithWatch /
+// WithTransaction it is the *redis.Tx / Pipeliner carried by ctx, otherwise
+// the plain client.
+func (r *ChannelPendingRepository) rdb(ctx context.Context) redis.Cmdable {
+	return redisApt.ExtractTrxOrCache(ctx, r.redisClient).GetRDB()
+}
+
+// Key exposes the key this repo uses for userID (for TrxManager.WithWatch).
+func (r *ChannelPendingRepository) Key(userID string) string {
+	return keyFunc(userID)
+}
+
+// Remove deletes the key WITHOUT inspecting the reply, so it is safe inside
+// the write phase of a transaction (where replies are not available yet).
+func (r *ChannelPendingRepository) Remove(ctx context.Context, userID string) error {
+	if err := r.rdb(ctx).Del(ctx, keyFunc(userID)).Err(); err != nil {
+		return fmt.Errorf("%w: %v", exception.ErrCacheOperation, err)
+	}
 	return nil
 }

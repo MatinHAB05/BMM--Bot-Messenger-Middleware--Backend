@@ -73,7 +73,6 @@ type AuthService interface {
 	Refresh(ctx context.Context, refreshToken string) (*TokenPairResponse, error)
 	Logout(ctx context.Context, accessToken string) error
 
-	// TODO
 	SendOTP(ctx context.Context, identifier, otpType string) (*SendAuthOTPResponse, error)
 	VerifyOTP(ctx context.Context, identifier, otpType, code string) (*bool, error)
 }

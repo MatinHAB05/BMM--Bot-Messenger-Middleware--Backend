@@ -106,7 +106,7 @@ type AttachmentListResponse struct {
 // ordinary single-message ingestion.
 type IngestMessageWithAttachmentsRequest struct {
 	ChatID            uint                      `json:"chat_id"`
-	MediaGroupID      string                    `json:"media_group_id,omitempty"` //TODO : WARNING!
+	MediaGroupID      string                    `json:"media_group_id,omitempty"`
 	PlatformMessageID int64                     `json:"platform_message_id"`
 	SenderID          string                    `json:"sender_id,omitempty"`
 	SenderName        string                    `json:"sender_name,omitempty"`

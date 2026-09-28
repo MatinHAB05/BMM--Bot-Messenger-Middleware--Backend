@@ -1,8 +1,9 @@
-// service/chat_link_service_impl.go
 package service
 
+// TODO : return otp invalid or expired err (to have send a messgage in messagers handlers that otp is invalid or expired )
 import (
 	"context"
+	"errors"
 	"strconv"
 
 	service_contract "messenger-backend/internal/application/contract"
@@ -100,25 +101,39 @@ func (s *chatLinkService) PrepareChannelLink(ctx context.Context, otpCode, targe
 	return nil
 }
 
+// ConfirmChannelLink consumes the pending record atomically (Redis WATCH),
+// then updates Postgres. Redis and Postgres can't share one transaction, so
+// if the DB step fails the pending record is put back (best effort) so the
+// approver can simply retry instead of having to restart the whole flow.
 func (s *chatLinkService) ConfirmChannelLink(ctx context.Context, platform, platformChatID, approverUserID string) (*service_contract.ChatResponse, error) {
 	companyID, err := s.channelPendingService.GetAndRemovePendingChannel(ctx, approverUserID)
 	if err != nil {
-		s.errLog.Error(err, "failed to retrieve pending channel record for approver", logger.String("approver_user_id", approverUserID))
+		if !errors.Is(err, exception.ErrOTPNotFound) {
+			s.errLog.Error(err, "failed to retrieve pending channel record for approver", logger.String("approver_user_id", approverUserID))
+		}
 		return nil, err
 	}
 
 	targetChat, err := s.chatService.GetByPlatformID(ctx, platform, platformChatID)
 	if err != nil {
 		s.errLog.Error(err, "failed to fetch chat by platform ID", logger.String("platform_chat_id", platformChatID))
+		s.restorePending(ctx, approverUserID, *companyID)
 		return nil, err
 	}
 
 	updatedChat, err := s.chatService.UpdateCompanyID(ctx, *companyID, targetChat.ID)
 	if err != nil {
 		s.errLog.Error(err, "failed to update chat company ID", logger.Uint("company_id", *companyID), logger.Any("chat_id", targetChat.ID))
+		s.restorePending(ctx, approverUserID, *companyID)
 		return nil, err
 	}
 
 	s.log.Info("successfully linked channel to company", logger.Any("chat_id", updatedChat.ID), logger.Uint("company_id", *companyID))
 	return updatedChat, nil
+}
+
+func (s *chatLinkService) restorePending(ctx context.Context, approverUserID string, companyID uint) {
+	if err := s.channelPendingService.SetPendingChannel(ctx, approverUserID, companyID); err != nil {
+		s.errLog.Error(err, "failed to restore pending channel after failed confirm", logger.String("approver_user_id", approverUserID), logger.Uint("company_id", companyID))
+	}
 }

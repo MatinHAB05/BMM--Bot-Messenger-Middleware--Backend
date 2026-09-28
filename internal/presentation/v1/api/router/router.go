@@ -9,11 +9,9 @@ import (
 	service_contract "messenger-backend/internal/application/contract"
 	"messenger-backend/internal/domain/paseto"
 	repository_contract "messenger-backend/internal/domain/repository"
-	apimiddleware "messenger-backend/internal/presentation/middleware/api"
 	apihandler "messenger-backend/internal/presentation/v1/api/handler"
 	"messenger-backend/pkg/logger"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -50,7 +48,8 @@ func New(deps Dependencies, cfg *Config) *gin.Engine {
 	engine.Use(gin.Logger(), gin.Recovery())
 	// engine.Use(middleware.Recovery(deps.Logger))
 
-	engine.Use(apimiddleware.RateLimit(deps.RateLimiterRepository, "global", cfg.GlobalPerMinute, time.Minute, deps.Logger))
+	// TODO : for now beacause we use polling method for get history of chat history we need to unlimited or very low limiter for endpoints SO when polling is replaced with ws rate limiter must used again
+	// engine.Use(apimiddleware.RateLimit(deps.RateLimiterRepository, "global", cfg.GlobalPerMinute, time.Minute, deps.Logger))
 
 	engine.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})

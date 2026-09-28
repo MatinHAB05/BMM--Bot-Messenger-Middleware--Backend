@@ -9,11 +9,10 @@ import (
 	"errors"
 	"fmt"
 
-	"golang.org/x/crypto/bcrypt"
-
 	"messenger-backend/internal/domain/entity"
 	"messenger-backend/internal/domain/exception"
 	repository_contract "messenger-backend/internal/domain/repository"
+	"messenger-backend/pkg/hasher"
 	"messenger-backend/pkg/logger"
 )
 
@@ -27,6 +26,7 @@ func Run(
 	userRepo repository_contract.UserRepository,
 	rbacRepo repository_contract.RBACRepository,
 	chatRepo repository_contract.ChatRepository,
+	hasher hasher.Hasher,
 	cfg Config,
 	log logger.Logger,
 ) (uint, error) {
@@ -44,7 +44,7 @@ func Run(
 	if company != nil {
 		log.Info("seed: default company already exists, skipping creation", logger.String("code", cfg.CompanyCode))
 	} else {
-		company = &entity.Company{Name: cfg.CompanyName, Code: cfg.CompanyCode, IsActive: true}
+		company = &entity.Company{Name: cfg.CompanyName, Code: cfg.CompanyCode, IsActive: true, Description: "My-init-description-company-for-test :)"}
 		if createErr := companyRepo.Create(ctx, company); createErr != nil {
 			return 0, fmt.Errorf("create default company: %w", createErr)
 		}
@@ -59,12 +59,14 @@ func Run(
 	if admin != nil {
 		log.Info("seed: admin user already exists, skipping creation", logger.String("username", cfg.SuperAdminUsername))
 	} else {
-		hash, hashErr := bcrypt.GenerateFromPassword([]byte(cfg.SuperAdminPassword), bcrypt.DefaultCost)
+		hash, hashErr := hasher.Hash(cfg.SuperAdminPassword)
 		if hashErr != nil {
 			return 0, fmt.Errorf("hash admin password: %w", hashErr)
 		}
 
 		admin = &entity.User{
+			Firstname:       "Matin",
+			Lastname:        "HAB",
 			CompanyID:       company.ID,
 			Username:        cfg.SuperAdminUsername,
 			Email:           &cfg.SuperAdminEmail,

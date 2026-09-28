@@ -13,26 +13,23 @@ import (
 	"messenger-backend/internal/domain/tokencontext"
 )
 
+type BroadcastHandlerConfig struct {
+	MaxBroadcastAttachmentFileSize int
+	MaxBroadcastAttachmentFiles    int
+}
+
 type BroadcastHandler struct {
 	broadcastService service_contract.BroadcastService
+
+	cfg *BroadcastHandlerConfig
 }
 
-func NewBroadcastHandler(broadcastService service_contract.BroadcastService) *BroadcastHandler {
-	return &BroadcastHandler{broadcastService: broadcastService}
+func NewBroadcastHandler(
+	broadcastService service_contract.BroadcastService,
+	cfg *BroadcastHandlerConfig,
+) *BroadcastHandler {
+	return &BroadcastHandler{broadcastService: broadcastService, cfg: cfg}
 }
-
-// TODO : create config type
-const (
-	// maxBroadcastAttachmentFileSize bounds a single attachment file.
-	// 50MB matches Telegram's own general ceiling for bot-uploaded files;
-	// tighten it if your Bale integration needs something smaller.
-	maxBroadcastAttachmentFileSize = 50 << 20
-	// maxBroadcastAttachmentFiles bounds how many files one broadcast can
-	// attach at once (all of the same attachment_type). Mirrors
-	// Telegram's own sendMediaGroup cap (2-10 items) as a sane ceiling;
-	// adjust to taste.
-	maxBroadcastAttachmentFiles = -1
-)
 
 // Send handles POST /api/v1/broadcast. The service fans the message out
 // to every requested platform concurrently and only returns once all
@@ -55,7 +52,7 @@ func (h *BroadcastHandler) Send(c *gin.Context) {
 	var req service_contract.BroadcastRequest
 
 	if isMultipart(c) {
-		parsed, err := parseBroadcastMultipart(c)
+		parsed, err := h.parseBroadcastMultipart(c)
 		if err != nil {
 			fail(c, exception.Wrap(exception.ErrBadRequest, err))
 			return
@@ -103,7 +100,7 @@ func isMultipart(c *gin.Context) bool {
 // form. "attachment" is optional and repeatable -- its absence yields a
 // text-only request, same as the JSON path; every repetition is treated
 // as one more file of the single attachment_type given.
-func parseBroadcastMultipart(c *gin.Context) (service_contract.BroadcastRequest, error) {
+func (h *BroadcastHandler) parseBroadcastMultipart(c *gin.Context) (service_contract.BroadcastRequest, error) {
 	req := service_contract.BroadcastRequest{
 		Message:   c.PostForm("message"),
 		Platforms: c.PostFormArray("platforms"),
@@ -119,8 +116,8 @@ func parseBroadcastMultipart(c *gin.Context) (service_contract.BroadcastRequest,
 		return req, nil
 	}
 	// ? -1 == no limitation
-	if maxBroadcastAttachmentFiles != -1 && len(fileHeaders) > maxBroadcastAttachmentFiles {
-		return req, fmt.Errorf("at most %d attachment files are allowed per broadcast, got %d", maxBroadcastAttachmentFiles, len(fileHeaders))
+	if h.cfg.MaxBroadcastAttachmentFiles != -1 && h.cfg.MaxBroadcastAttachmentFileSize != -1 && len(fileHeaders) > h.cfg.MaxBroadcastAttachmentFileSize {
+		return req, fmt.Errorf("at most %d attachment files are allowed per broadcast, got %d", h.cfg.MaxBroadcastAttachmentFileSize, len(fileHeaders))
 	}
 
 	attachmentType := service_contract.BroadcastAttachmentType(c.PostForm("attachment_type"))
@@ -137,8 +134,8 @@ func parseBroadcastMultipart(c *gin.Context) (service_contract.BroadcastRequest,
 
 	files := make([]service_contract.BroadcastAttachmentFile, 0, len(fileHeaders))
 	for _, fh := range fileHeaders {
-		if fh.Size > maxBroadcastAttachmentFileSize {
-			return req, fmt.Errorf("attachment %q exceeds %d bytes", fh.Filename, maxBroadcastAttachmentFileSize)
+		if fh.Size > int64(h.cfg.MaxBroadcastAttachmentFileSize) {
+			return req, fmt.Errorf("attachment %q exceeds %d bytes", fh.Filename, int64(h.cfg.MaxBroadcastAttachmentFileSize))
 		}
 
 		f, err := fh.Open()
@@ -194,7 +191,6 @@ func (h *BroadcastHandler) Delete(c *gin.Context) {
 	success(c, http.StatusOK, gin.H{"message": "chat delete broadcast message deleted"})
 }
 
-// TODO
 // Delete handles DELETE /api/v1/broadcast/batch
 func (h *BroadcastHandler) DeleteBatch(c *gin.Context) {
 	var req service_contract.DeleteBroadcastBatchRequest

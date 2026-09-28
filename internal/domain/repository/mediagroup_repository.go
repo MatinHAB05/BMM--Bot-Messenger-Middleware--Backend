@@ -13,4 +13,6 @@ type MediaGroupRepository interface {
 	GetAndDelete(ctx context.Context, mediaGroupID string, chatID string) (uint, error)
 	ForceGet(ctx context.Context, mediaGroupID string, chatID string, chatHistoryID uint, ttl time.Duration) (uint, error)
 	TTL(ctx context.Context, mediaGroupID string, chatID string) (time.Duration, error)
+	Key(mediaGroupID string, chatID string) string
+	Remove(ctx context.Context, mediaGroupID string, chatID string) error
 }

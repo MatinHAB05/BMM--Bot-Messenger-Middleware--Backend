@@ -24,35 +24,41 @@ type SendRegistionrWithOTPResponse struct {
 }
 
 type CreateCompanyRequest struct {
-	Name string `json:"name" binding:"omitempty,min=2,max=128"`
-	Code string `json:"code" binding:"omitempty,min=2,max=64"`
+	Name        string `json:"name" binding:"omitempty,min=2,max=128"`
+	Code        string `json:"code" binding:"omitempty,min=2,max=64"`
+	Description string `json:"description" binding:"omitempty"`
 }
 
 // UpdateCompanyRequest is the payload for PUT /api/v1/companies/:id. All
 // fields are optional -- only those provided are changed.
 type UpdateCompanyRequest struct {
-	Name     string `json:"name" binding:"omitempty,min=2,max=128"`
-	Code     string `json:"code" binding:"omitempty,min=2,max=64"`
-	IsActive *bool  `json:"is_active"`
+	Name        string `json:"name" binding:"omitempty,min=2,max=128"`
+	Code        string `json:"code" binding:"omitempty,min=2,max=64"`
+	IsActive    *bool  `json:"is_active"`
+	Description string `json:"description" binding:"omitempty"`
 }
 
 // CompanyResponse is the public representation of a Company.
 type CompanyResponse struct {
-	ID        uint   `json:"id"`
-	Name      string `json:"name"`
-	Code      string `json:"code"`
-	IsActive  bool   `json:"is_active"`
-	CreatedAt string `json:"created_at"`
+	ID          uint   `json:"id"`
+	Description string `json:"description"`
+	Name        string `json:"name"`
+	Code        string `json:"code"`
+	IsActive    bool   `json:"is_active"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
 }
 
 // ToCompanyResponse maps a persisted Company into the API-facing
 // representation.
 func ToCompanyResponse(company *entity.Company) CompanyResponse {
 	return CompanyResponse{
-		ID:        company.ID,
-		Name:      company.Name,
-		Code:      company.Code,
-		IsActive:  company.IsActive,
-		CreatedAt: company.CreatedAt.Format(timeLayout),
+		ID:          company.ID,
+		Name:        company.Name,
+		Code:        company.Code,
+		IsActive:    company.IsActive,
+		CreatedAt:   company.CreatedAt.Format(timeLayout),
+		Description: company.Description,
+		UpdatedAt:   company.UpdatedAt.Format(timeLayout),
 	}
 }

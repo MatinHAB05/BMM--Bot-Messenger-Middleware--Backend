@@ -19,13 +19,24 @@ type Config struct {
 	RDBNumber int
 }
 
+// Cache is the analogue of database.Database.
+//
+//   - GetRDB() returns a redis.Cmdable. Outside a transaction it is the real
+//     *redis.Client; inside a transaction it is a *redis.Tx (watch phase) or a
+//     redis.Pipeliner (MULTI/EXEC phase). Repositories must only use the
+//     Cmdable API so they work in all three modes.
+//   - GetClient() returns the raw *redis.Client (Watch/Close/Ping, etc.).
+//   - WithCmdable() is the analogue of Database.WithTx().
 type Cache interface {
-	GetRDB() *redis.Client
+	GetRDB() redis.Cmdable
+	GetClient() *redis.Client
+	WithCmdable(c redis.Cmdable) Cache
 	GetRedisConfig() Config
 }
 
 type RedisDatabase struct {
 	rdb *redis.Client
+	cmd redis.Cmdable
 	*Config
 }
 
@@ -43,8 +54,7 @@ func NewRedisDatabase(ctx context.Context, cfg *Config) (Cache, error) {
 			Password: cfg.Password,
 			DB:       cfg.RDBNumber,
 		})
-		_, err := rdb.Ping(ctx).Result()
-		if err != nil {
+		if _, err := rdb.Ping(ctx).Result(); err != nil {
 			rdbErr = fmt.Errorf("failed to connect to Redis: %w", err)
 			return
 		}
@@ -54,14 +64,20 @@ func NewRedisDatabase(ctx context.Context, cfg *Config) (Cache, error) {
 	if rdbErr != nil {
 		return nil, rdbErr
 	}
-
 	return rdbInstance, nil
 }
 
-func (rdb *RedisDatabase) GetRDB() *redis.Client {
-	return rdbInstance.rdb
+func (r *RedisDatabase) GetRDB() redis.Cmdable {
+	if r.cmd != nil {
+		return r.cmd
+	}
+	return r.rdb
 }
 
-func (rdb *RedisDatabase) GetRedisConfig() Config {
-	return *rdb.Config
+func (r *RedisDatabase) GetClient() *redis.Client { return r.rdb }
+
+func (r *RedisDatabase) WithCmdable(c redis.Cmdable) Cache {
+	return &RedisDatabase{rdb: r.rdb, cmd: c, Config: r.Config}
 }
+
+func (r *RedisDatabase) GetRedisConfig() Config { return *r.Config }

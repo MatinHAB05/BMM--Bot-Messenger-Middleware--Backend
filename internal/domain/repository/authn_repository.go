@@ -12,4 +12,6 @@ type AuthnTokenRepository interface {
 	BlacklistAccessToken(ctx context.Context, jti string, ttl time.Duration) error
 	DeleteUserRefreshSessions(ctx context.Context, userID string) error
 	IsBlacklisted(ctx context.Context, jti string) (bool, error)
+	RefreshSessionKey(userID, tokenID string) string
+	BlacklistKey(jti string) string
 }

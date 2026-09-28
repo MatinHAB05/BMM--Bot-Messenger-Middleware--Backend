@@ -1,5 +1,6 @@
 package bootstrap
 
+// TODO : custom expr time for otps (even get expr time for otps from users in some cases!)
 import (
 	"context"
 	"fmt"
@@ -33,6 +34,7 @@ import (
 	telegramhandlers "messenger-backend/internal/presentation/v1/telegram/handler"
 	telegramrouter "messenger-backend/internal/presentation/v1/telegram/router"
 
+	"messenger-backend/pkg/hasher"
 	"messenger-backend/pkg/logger"
 	"messenger-backend/pkg/messenger"
 	"messenger-backend/pkg/messenger/telegram"
@@ -99,6 +101,7 @@ func Init(ctx context.Context) (*App, error) {
 	if err := runMigrations(db.GetGormDB(), env.Migration.MigrationsDirPath, log); err != nil {
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
+	trxManger := database.NewTrxManager(db)
 
 	// ----------------------------------------------------------------
 	// 4. Redis
@@ -107,6 +110,8 @@ func Init(ctx context.Context) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("init redis: %w", err)
 	}
+	//
+	redisTrx := redisinfra.NewTrxManager(redisClient, cons.Redis.MaxRetries, cons.Redis.Backoff)
 
 	// ----------------------------------------------------------------
 	// 5. Auth primitives (token maker + RBAC enforcer)
@@ -134,7 +139,6 @@ func Init(ctx context.Context) (*App, error) {
 		return nil, err
 	}
 
-	
 	batchPool, err := newAntsPool(20, "batch")
 	if err != nil {
 		return nil, err
@@ -184,12 +188,12 @@ func Init(ctx context.Context) (*App, error) {
 	// ----------------------------------------------------------------
 	// 9. Domain services (not an exhaustive list)
 	// ----------------------------------------------------------------
-	trxManger := database.NewTrxManager(db)
+	appHasher := hasher.NewBcryptHasher()
 	emailDelivery := appservice.NewEmailService(mail.NewMailer(newMailerConfig(env)), env.Email.LogInFile, env.Email.RealSend, statics, log, emailPool)
 	mediaGroupService := appservice.NewMediaGroupService(mediaGroupRepo, log, newMediaGroupServiceConfig())
 
 	gen := otp.NewDefaultCodeGenerator()
-	otpService, _ := appservice.NewOTPService(otpRepo, emailDelivery, env.App.AppEnv, log,
+	otpService, _ := appservice.NewOTPService(otpRepo, redisTrx, emailDelivery, env.App.AppEnv, log,
 		otp.NewPhoneStrategy(env.OTP.OTPTokenTTL, 5, gen),
 		otp.NewEmailStrategy(env.OTP.OTPTokenTTL, 5, gen),
 		otp.NewLinkGroupChatCompanyStrategy(env.OTP.OTPTokenTTL, 5, gen),
@@ -197,7 +201,7 @@ func Init(ctx context.Context) (*App, error) {
 		otp.NewRegisterUserStrategy(env.OTP.OTPTokenTTL, 5, gen),
 	)
 	attachService := appservice.NewAttachmentService(mediaGroupService, attachRepo, chatHisRepo, s3Repo, trxManger, log, env.S3.Bucket, time.Hour)
-	authService := appservice.NewAuthService(userRepo, companyRepo, rbacRepo, tokenRepo, otpService, trxManger, tokenMaker, log, newAuthServiceConfig(env))
+	authService := appservice.NewAuthService(userRepo, companyRepo, rbacRepo, tokenRepo, otpService, trxManger, tokenMaker, appHasher, log, newAuthServiceConfig(env))
 
 	channelPendingService := appservice.NewChannelPendingService(channelPendingRepo, log, newChannelPendingServiceConfig(env))
 	chatHisService := appservice.NewChatHistoryService(chatRepo, chatHisRepo, log)
@@ -205,7 +209,7 @@ func Init(ctx context.Context) (*App, error) {
 	chatLinkService := appservice.NewChatLinkService(chatService, otpService, channelPendingService, log, errlog)
 	companyServie := appservice.NewCompanyService(companyRepo, otpService, log)
 	rbacService := appservice.NewRBACService(rbacRepo, log)
-	sentbalemsgService := appservice.NewSentBaleMsgService(sentbalemsgRepo, log, newSentBaleMsgServiceConfig())
+	sentbalemsgService := appservice.NewSentBaleMsgService(sentbalemsgRepo, redisTrx, log, newSentBaleMsgServiceConfig())
 	userService := appservice.NewUserService(userRepo, otpService, rbacRepo, log)
 	Services := service_contract.Services{
 		AuthService:           authService,
@@ -225,7 +229,7 @@ func Init(ctx context.Context) (*App, error) {
 	// ----------------------------------------------------------------
 	// 10. Seed database
 	// ----------------------------------------------------------------
-	if _, err := seed.Run(ctx, companyRepo, userRepo, rbacRepo, chatRepo, newSeedConfig(env), log); err != nil {
+	if _, err := seed.Run(ctx, companyRepo, userRepo, rbacRepo, chatRepo, appHasher, newSeedConfig(env), log); err != nil {
 		return nil, fmt.Errorf("seed database: %w", err)
 	}
 
@@ -268,7 +272,6 @@ func Init(ctx context.Context) (*App, error) {
 	// so its handlers/router mirror the Telegram ones above almost exactly —
 	// same command handlers, same dependency shape, just its own bot token
 	// and its own logger/adapter instance.
-	//TODO
 	basicBaleHandler := balehandlers.NewBasicHandler(chatService, chatHisService, attachService, sentbalemsgService, s3Repo, env.S3.Bucket, log, errlog)
 	directFeatChatCommandBaleHandler := balehandlers.NewDirectFeatChatCommandHandler(chatLinkService, errlog)
 	featChannelBaleHandler := balehandlers.NewFeatChannelHandler(chatLinkService, env.Bot.BaleBotUsername, errlog)
@@ -301,7 +304,6 @@ func Init(ctx context.Context) (*App, error) {
 	if telegramAdapter != nil {
 		clients = append(clients, telegramAdapter)
 	}
-	//TODO
 
 	baleAdapter, err := newBaleAdapter(env.Bot.BaleBotToken, baleDeps, baleCfg, log)
 	if err != nil {
@@ -338,7 +340,7 @@ func Init(ctx context.Context) (*App, error) {
 
 	attachmenHandler := apihandler.NewAttachmentHandler(attachService)
 	authHandler := apihandler.NewAuthHandler(authService)
-	broadcastHandler := apihandler.NewBroadcastHandler(broadcastService)
+	broadcastHandler := apihandler.NewBroadcastHandler(broadcastService, newBroadcastHandlerConfig(env))
 	chatHandler := apihandler.NewChatHandler(chatService, companyServie)
 	chatHisHandler := apihandler.NewChatHistoryHandler(chatHisService)
 	companyHandler := apihandler.NewCompanyHandler(companyServie)
@@ -374,7 +376,7 @@ func Init(ctx context.Context) (*App, error) {
 		Logger: log,
 
 		DB:    db.GetGormDB(),
-		Redis: redisClient.GetRDB(),
+		Redis: redisClient.GetClient(),
 
 		Router: apirouter.New(deps, newAPIRouterConfig(env)),
 
@@ -512,6 +514,13 @@ func newAPIRouterConfig(env *Environment) *apirouter.Config {
 		GlobalPerMinute:    env.RateLimit.GlobalPerMinute,
 		AuthPerMinute:      env.RateLimit.AuthPerMinute,
 		BroadcastPerMinute: env.RateLimit.BroadcastPerMinute,
+	}
+}
+
+func newBroadcastHandlerConfig(env *Environment) *apihandler.BroadcastHandlerConfig {
+	return &apihandler.BroadcastHandlerConfig{
+		MaxBroadcastAttachmentFileSize: env.Attachment.MaxBroadcastAttachmentFileSize,
+		MaxBroadcastAttachmentFiles:    env.Attachment.MaxBroadcastAttachmentFiles,
 	}
 }
 

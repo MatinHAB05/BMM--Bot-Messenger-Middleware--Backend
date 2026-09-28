@@ -39,4 +39,7 @@ type OTPRepository interface {
 	// TTL returns the remaining time-to-live for key.
 	// Returns exception.ErrOTPNotFound if key doesn't exist.
 	TTL(ctx context.Context, key string) (time.Duration, error)
+	Remove(ctx context.Context, key string) error
+	RemoveVerified(ctx context.Context, key string) error
+	VerifiedKey(key string) string
 }

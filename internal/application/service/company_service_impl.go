@@ -44,9 +44,10 @@ func (s *companyService) Create(ctx context.Context, req service_contract.Create
 	}
 
 	com := &entity.Company{
-		Name:     req.Name,
-		Code:     req.Code,
-		IsActive: true,
+		Name:        req.Name,
+		Code:        req.Code,
+		Description: req.Description,
+		IsActive:    true,
 	}
 	if err := s.companyRepo.Create(ctx, com); err != nil {
 		return nil, exception.Wrap(exception.ErrInternal, err)
@@ -96,6 +97,7 @@ func (s *companyService) Update(ctx context.Context, callerCompanyID, targetComp
 	if req.IsActive != nil {
 		company.IsActive = *req.IsActive
 	}
+	company.Description = req.Description
 
 	if err := s.companyRepo.Update(ctx, company); err != nil {
 		return nil, exception.Wrap(exception.ErrInternal, err)

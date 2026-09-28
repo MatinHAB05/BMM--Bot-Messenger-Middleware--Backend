@@ -13,8 +13,6 @@ import (
 	"strconv"
 )
 
-//TODO : use hasher interface
-
 // userService implements service_contract.UserService. Every method is scoped to
 // a companyID -- there is no path to read or mutate a user outside the
 // caller's own company. Role assignment is never stored on the User row;
@@ -131,7 +129,7 @@ func (s *userService) Create(ctx context.Context, companyID uint, req service_co
 	var passwordHash string
 
 	if req.Password != "" {
-		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		hash, err := s.hasher.Hash(req.Password)
 		if err != nil {
 			return nil, exception.Wrap(exception.ErrInternal, err)
 		}
@@ -180,6 +178,8 @@ func (s *userService) Update(ctx context.Context, companyID uint, userID string,
 	if req.IsActive != nil {
 		user.IsActive = *req.IsActive
 	}
+	user.Firstname = req.Firstname
+	user.Lastname = req.Lastname
 
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return nil, exception.Wrap(exception.ErrInternal, err)
