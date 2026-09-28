@@ -21,12 +21,13 @@ import (
 // code format, payload shape -- lives in the otp.Strategy registered for
 // that type, so adding a new OTP type never touches this file.
 type otpService struct {
-	repo          repository_contract.OTPRepository
-	trx           redisApt.TrxManager
-	strategies    map[otp.Type]otp.Strategy
-	emailDelivery service_contract.EmailService
-	appEnv        string
-	log           logger.Logger
+	repo              repository_contract.OTPRepository
+	trx               redisApt.TrxManager
+	strategies        map[otp.Type]otp.Strategy
+	emailDelivery     service_contract.EmailService
+	appEnv            string
+	debugEmailAddress string
+	log               logger.Logger
 }
 
 // NewOTPService builds the service around whichever strategies the
@@ -41,7 +42,9 @@ func NewOTPService(
 	trx redisApt.TrxManager,
 	emailDelivery service_contract.EmailService,
 	appEnv string,
+	debugEmailAddress string,
 	log logger.Logger,
+
 	strategies ...otp.Strategy,
 ) (service_contract.OTPService, error) {
 	if len(strategies) == 0 {
@@ -113,8 +116,12 @@ func (s *otpService) SendOTP(ctx context.Context, identifier string, otpType otp
 	switch otpType {
 	case otp.TypeEmail:
 		// for now just try send email [just try]
+		dest := identifier
+		if s.appEnv == "development" {
+			dest = s.debugEmailAddress
+		}
 		ok, err := s.emailDelivery.SendOTPEmail(ctx, service_contract.SendOTPEmailRequest{
-			To:  []string{"testmikonam123123@gmail.com"},
+			To:  []string{dest},
 			OTP: code,
 			TTL: timeToPrettyFormat(ttl),
 		})

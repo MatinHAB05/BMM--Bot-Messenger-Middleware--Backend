@@ -193,7 +193,7 @@ func Init(ctx context.Context) (*App, error) {
 	mediaGroupService := appservice.NewMediaGroupService(mediaGroupRepo, log, newMediaGroupServiceConfig())
 
 	gen := otp.NewDefaultCodeGenerator()
-	otpService, _ := appservice.NewOTPService(otpRepo, redisTrx, emailDelivery, env.App.AppEnv, log,
+	otpService, _ := appservice.NewOTPService(otpRepo, redisTrx, emailDelivery, env.App.AppEnv, env.Email.DebugEmailAddress, log,
 		otp.NewPhoneStrategy(env.OTP.OTPTokenTTL, 5, gen),
 		otp.NewEmailStrategy(env.OTP.OTPTokenTTL, 5, gen),
 		otp.NewLinkGroupChatCompanyStrategy(env.OTP.OTPTokenTTL, 5, gen),

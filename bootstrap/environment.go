@@ -83,7 +83,9 @@ type OTPConfig struct {
 }
 
 type EmailConfig struct {
-	BMMEmail            string `mapstructure:"BMM_EMAIL" json:"bmm_email"`
+	BMMEmail          string `mapstructure:"BMM_EMAIL" json:"bmm_email"`
+	DebugEmailAddress string `mapstructure:"DEBUG_EMAIL_ADDRESS" json:"debug_email_address"`
+
 	BMMEmailAppPassword string `mapstructure:"BMM_EMAIL_APP_PASSWORD" json:"bmm_email_app_password"`
 	SMTPHost            string `mapstructure:"SMTP_HOST" json:"smtp_host"`
 	SMTPPort            string `mapstructure:"SMTP_HOST_PORT" json:"smtp_host_port"`
