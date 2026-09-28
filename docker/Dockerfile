@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Arguments for flexible base image versions
-ARG GO_VERSION=1.24-alpine
+ARG GO_VERSION=1.26-alpine
 ARG ALPINE_VERSION=3.20
 
 # ==============================================================================

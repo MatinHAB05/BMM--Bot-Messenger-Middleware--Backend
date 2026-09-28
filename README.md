@@ -1,6 +1,6 @@
 ﻿# 🛡️ BMM Backend — Bot Messenger Middleware Engine
 
-[![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go)](https://golang.org/)
+[![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go)](https://golang.org/)
 [![Gin Framework](https://img.shields.io/badge/Gin-v1.12-008ECF?style=flat-square&logo=gin)](https://gin-gonic.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=flat-square&logo=redis)](https://redis.io/)
@@ -236,7 +236,7 @@ BMM--Bot-Messenger-Middleware--Backend/
 ## ⚙️ Getting Started & Local Development
 
 ### Prerequisites
-- **Go**: `1.24+` installed
+- **Go**: `1.26+` installed
 - **Docker & Docker Compose** (for running PostgreSQL, Redis, and RustFS)
 
 ### 1. Environment Configuration
