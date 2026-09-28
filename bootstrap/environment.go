@@ -79,7 +79,20 @@ type MigrationConfig struct {
 }
 
 type OTPConfig struct {
-	OTPTokenTTL time.Duration `mapstructure:"OTP_TOKEN_TTL" json:"otp_token_ttl"`
+	OTPTokenTTL time.Duration `mapstructure:"OTP_TOKEN_TTL" json:"otp_token_ttl"` // generic fallback
+
+	PhoneTTL           time.Duration `mapstructure:"OTP_PHONE_TTL" json:"otp_phone_ttl"`
+	EmailTTL           time.Duration `mapstructure:"OTP_EMAIL_TTL" json:"otp_email_ttl"`
+	LinkGroupChatTTL   time.Duration `mapstructure:"OTP_LINK_GROUP_CHAT_TTL" json:"otp_link_group_chat_ttl"`
+	LinkChannelChatTTL time.Duration `mapstructure:"OTP_LINK_CHANNEL_CHAT_TTL" json:"otp_link_channel_chat_ttl"`
+	RegisterUserTTL    time.Duration `mapstructure:"OTP_REGISTER_USER_TTL" json:"otp_register_user_ttl"`
+}
+
+func (o OTPConfig) ttlOrDefault(specific time.Duration) time.Duration {
+	if specific > 0 {
+		return specific
+	}
+	return o.OTPTokenTTL
 }
 
 type EmailConfig struct {
@@ -136,9 +149,37 @@ func LoadEnvironment() *Environment {
 		log.Printf("No .env file found or error reading it, using environment variables and defaults: %v", err)
 	}
 
+	// Make sure the per-purpose OTP TTL keys are visible to viper even when they
+	// only exist as real environment variables (not in the .env file).
+	for _, k := range []string{
+		"OTP_PHONE_TTL",
+		"OTP_EMAIL_TTL",
+		"OTP_LINK_GROUP_CHAT_TTL",
+		"OTP_LINK_CHANNEL_CHAT_TTL",
+		"OTP_REGISTER_USER_TTL",
+	} {
+		_ = v.BindEnv(k)
+	}
+
 	var env Environment
 	if err := v.Unmarshal(&env); err != nil {
 		log.Fatalf("Failed to unmarshal environment config: %v", err)
+	}
+
+	// A zero TTL means "no expiry" in Redis, so the generic fallback must be set.
+	if env.OTP.OTPTokenTTL <= 0 {
+		log.Fatalf("OTP_TOKEN_TTL must be > 0")
+	}
+	for name, d := range map[string]time.Duration{
+		"OTP_PHONE_TTL":             env.OTP.PhoneTTL,
+		"OTP_EMAIL_TTL":             env.OTP.EmailTTL,
+		"OTP_LINK_GROUP_CHAT_TTL":   env.OTP.LinkGroupChatTTL,
+		"OTP_LINK_CHANNEL_CHAT_TTL": env.OTP.LinkChannelChatTTL,
+		"OTP_REGISTER_USER_TTL":     env.OTP.RegisterUserTTL,
+	} {
+		if d < 0 {
+			log.Fatalf("%s must not be negative", name)
+		}
 	}
 
 	adminChatsFile := getEnv("ADMIN_CHATS_FILE_PATH", "./adminchats.env.json")
