@@ -115,6 +115,23 @@ func (s *broadcastService) validatePlatforms(platforms []string) error {
 	return nil
 }
 
+// GetBroadcastPlatforms returns the distinct platforms that the given
+// broadcast UUID was actually delivered to, by querying the DB with no
+// platform filter so every matching chat row is returned.
+func (s *broadcastService) GetBroadcastPlatforms(ctx context.Context, companyID uint, broadcastMsgUUID uuid.UUID) ([]string, error) {
+	// passing nil/empty platforms = no IN-filter → returns ALL platforms
+	platformChats, _, err := s.chatRepo.GetAllChatsContainsBroadcastMsgUUID(ctx, companyID, broadcastMsgUUID, nil)
+	if err != nil {
+		return nil, err
+	}
+	platforms := make([]string, 0, len(platformChats))
+	for p := range platformChats {
+		platforms = append(platforms, p)
+	}
+	return platforms, nil
+}
+
+
 // validateBroadcastAttachment defends the service against callers other
 // than BroadcastHandler (which already validates type/size/count on the
 // way in) -- e.g. anything invoking BroadcastService directly.

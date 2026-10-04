@@ -240,3 +240,29 @@ func (h *BroadcastHandler) Update(c *gin.Context) {
 
 	success(c, http.StatusOK, gin.H{"message": "chat updae broadcast message updated"})
 }
+
+// GetPlatforms handles GET /api/v1/broadcast/:id/platforms.
+// It returns the distinct platforms the broadcast was actually sent to,
+// so the frontend knows exactly which platforms to target on edit/delete.
+func (h *BroadcastHandler) GetPlatforms(c *gin.Context) {
+	companyID, ok := tokencontext.GetCompanyID(c)
+	if !ok {
+		fail(c, exception.ErrMissingToken)
+		return
+	}
+
+	broadcastMsgUUID, err := parseUUIDParam(c, "id")
+	if err != nil {
+		fail(c, err)
+		return
+	}
+
+	platforms, err := h.broadcastService.GetBroadcastPlatforms(c.Request.Context(), companyID, broadcastMsgUUID)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+
+	success(c, http.StatusOK, gin.H{"platforms": platforms})
+}
+

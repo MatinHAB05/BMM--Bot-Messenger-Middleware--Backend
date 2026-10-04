@@ -94,4 +94,7 @@ type BroadcastService interface {
 	DeleteBroadcast(ctx context.Context, companyID uint, broadcastMsgUUID uuid.UUID, req DeleteBroadcastRequest) error
 	DeleteBroadcastBatch(ctx context.Context, companyID uint, req DeleteBroadcastBatchRequest) error
 	UpdateBroadcast(ctx context.Context, companyID uint, broadcastMsgUUID uuid.UUID, req UpdateBroadcastRequest) error
+	// GetBroadcastPlatforms returns the distinct platforms that the given
+	// broadcast UUID was actually sent to, by querying the DB.
+	GetBroadcastPlatforms(ctx context.Context, companyID uint, broadcastMsgUUID uuid.UUID) ([]string, error)
 }

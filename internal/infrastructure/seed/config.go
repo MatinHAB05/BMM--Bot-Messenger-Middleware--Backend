@@ -39,11 +39,13 @@ var DefaultAdminPolicies = []policyRule{
 	{Role: entity.RoleSuperAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/broadcast/:id", Method: "PUT"}},
 	{Role: entity.RoleSuperAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/broadcast/:id", Method: "DELETE"}},
 	{Role: entity.RoleSuperAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/broadcast/batch", Method: "DELETE"}},
+	{Role: entity.RoleSuperAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/broadcast/:id/platforms", Method: "GET"}},
 
 	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/broadcast", Method: "POST"}},
 	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/broadcast/:id", Method: "PUT"}},
 	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/broadcast/:id", Method: "DELETE"}},
 	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/broadcast/batch", Method: "DELETE"}},
+	{Role: entity.RoleAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/broadcast/:id/platforms", Method: "GET"}},
 
 	// Chats & Chat Histories (Full access for both)
 	{Role: entity.RoleSuperAdmin, Domain: "*", Permission: entity.Permission{Endpoint: "/api/v1/chats", Method: "GET"}},

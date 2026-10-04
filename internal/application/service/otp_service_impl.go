@@ -64,6 +64,7 @@ func NewOTPService(
 		trx:           trx,
 		emailDelivery: emailDelivery,
 		strategies:    reg,
+		debugEmailAddress :  debugEmailAddress,
 		appEnv:        appEnv,
 		log:           log.With(logger.String("component", "otp_service")),
 	}, nil
@@ -117,7 +118,7 @@ func (s *otpService) SendOTP(ctx context.Context, identifier string, otpType otp
 	case otp.TypeEmail:
 		// for now just try send email [just try]
 		dest := identifier
-		if s.appEnv == "development" {
+		if  s.appEnv == "development" { //TODO
 			dest = s.debugEmailAddress
 		}
 		ok, err := s.emailDelivery.SendOTPEmail(ctx, service_contract.SendOTPEmailRequest{
