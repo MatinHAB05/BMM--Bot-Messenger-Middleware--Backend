@@ -3,12 +3,13 @@ name: Build and Publish Backend Docker Image
 on:
   push:
     tags:
-      - 'v*.*.*'
-      - 'v*'
+      - "v*.*.*"
+      - "v*"
+
   workflow_dispatch:
     inputs:
       push:
-        description: 'Push image to container registry'
+        description: "Push image to container registry"
         required: true
         type: boolean
         default: true
@@ -52,13 +53,9 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          flavor: |
-            latest=auto
           tags: |
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=sha,format=short
+            type=raw,value=latest
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
