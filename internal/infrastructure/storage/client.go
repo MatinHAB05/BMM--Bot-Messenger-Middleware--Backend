@@ -19,6 +19,21 @@ type Config struct {
 	SecretAccessKey string
 	UseSSL          bool
 	Region          string
+	// PublicEndpoint is the host:port used ONLY when signing presigned
+	// URLs (GetPresignedURL / GetPresignedURLsBatch) -- it must be an
+	// address the final consumer of the URL (a browser outside the
+	// Docker network, say) can actually reach, as opposed to Endpoint,
+	// which is used for every other, server-to-server call and is
+	// typically an internal Docker service name (e.g. "rustfs:9000")
+	// that only resolves inside the compose network. If left empty,
+	// Endpoint is reused for presigning too, preserving today's
+	// behavior. See PublicUseSSL below for the matching scheme.
+	PublicEndpoint string
+	// PublicUseSSL is Secure for the presign client. Defaults to UseSSL
+	// when PublicEndpoint is empty; must be set explicitly alongside a
+	// non-empty PublicEndpoint (e.g. true, once it's served over https
+	// via a reverse proxy).
+	PublicUseSSL bool
 	// Bucket is checked (and created if missing) once, at startup, by
 	// NewMinIORepository. Individual StorageRepository methods still take
 	// their own bucketName parameter -- pass this same value at call
@@ -32,6 +47,7 @@ type Config struct {
 
 type minioRepository struct {
 	client         *minio.Client
+	presignClient  *minio.Client
 	maxConcurrency int
 }
 
@@ -48,6 +64,24 @@ func NewMinIORepository(cfg Config) (repository_contract.StorageRepository, erro
 	})
 	if err != nil {
 		return nil, fmt.Errorf("minio: init client: %w", err)
+	}
+
+	// presignClient only ever builds signed URLs -- it makes no network
+	// calls of its own -- so it's cheap to construct even when
+	// PublicEndpoint is unset and this just duplicates client's settings.
+	publicEndpoint := cfg.PublicEndpoint
+	publicUseSSL := cfg.PublicUseSSL
+	if publicEndpoint == "" {
+		publicEndpoint = cfg.Endpoint
+		publicUseSSL = cfg.UseSSL
+	}
+	presignClient, err := minio.New(publicEndpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
+		Secure: publicUseSSL,
+		Region: cfg.Region,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("minio: init presign client: %w", err)
 	}
 
 	setupCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -68,5 +102,5 @@ func NewMinIORepository(cfg Config) (repository_contract.StorageRepository, erro
 		concurrency = 8
 	}
 
-	return &minioRepository{client: client, maxConcurrency: concurrency}, nil
+	return &minioRepository{client: client, presignClient: presignClient, maxConcurrency: concurrency}, nil
 }

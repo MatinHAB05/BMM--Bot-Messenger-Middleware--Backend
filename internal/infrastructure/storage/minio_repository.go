@@ -54,7 +54,11 @@ func (r *minioRepository) DownloadFile(ctx context.Context, bucketName, objectKe
 }
 
 func (r *minioRepository) GetPresignedURL(ctx context.Context, bucketName, objectKey string, expiry time.Duration) (string, error) {
-	presigned, err := r.client.PresignedGetObject(ctx, bucketName, objectKey, expiry, url.Values{})
+	// Deliberately uses presignClient, not client: the resulting URL is
+	// handed to an external caller (a browser outside the Docker
+	// network), so it must be signed against the publicly-reachable
+	// endpoint, not the internal one used for server-to-server calls.
+	presigned, err := r.presignClient.PresignedGetObject(ctx, bucketName, objectKey, expiry, url.Values{})
 	if err != nil {
 		return "", fmt.Errorf("minio: presign %q: %w", objectKey, err)
 	}

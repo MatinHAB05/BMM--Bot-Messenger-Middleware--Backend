@@ -453,6 +453,8 @@ func newS3StorageConfig(env *Environment) storage.Config {
 		Region:          env.S3.Region,
 		Bucket:          env.S3.Bucket,
 		MaxConcurrency:  env.S3.MaxConcurrency,
+		PublicEndpoint:  "localhost:9000", //TODO : move them to .env
+		PublicUseSSL:    false,
 	}
 }
 func newMailerConfig(env *Environment) mail.EmailConfig {

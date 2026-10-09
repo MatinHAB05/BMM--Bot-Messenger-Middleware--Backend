@@ -1,5 +1,6 @@
 services:
   app:
+    image: messenger-backend:latest
     # image: ghcr.io/matinhab05/bmm--bot-messenger-middleware--backend:latest
     build:
       context: ..
