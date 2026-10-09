@@ -40,6 +40,9 @@ func NewLogger(cmdLog bool, postfix string) (Logger, CloseFileLogger) {
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		log.Fatalf("ERR: Failed to create logs directory: %v", err)
 	}
+	if err := os.MkdirAll(cleanlogsDir, 0755); err != nil {
+		log.Fatalf("ERR: Failed to create clean logs directory: %v", err)
+	}
 
 	timeStamp := time.Now().Format("2006-01-02_15-04-05")
 
