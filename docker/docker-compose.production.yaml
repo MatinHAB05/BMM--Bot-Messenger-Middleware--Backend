@@ -1,9 +1,9 @@
 services:
   app:
+    # image: ghcr.io/matinhab05/bmm--bot-messenger-middleware--backend:latest
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    image: messenger-backend:latest
     container_name: messenger-backend-app
     restart: unless-stopped
     ports:
@@ -35,8 +35,13 @@ services:
       - ../logs:/app/logs
       - ../clean-logs:/app/clean-logs
       - ../adminchats.env.json:/app/adminchats.env.json:ro
+      - ../migrations:/migrations
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:$${PORT:-8080}/health || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://127.0.0.1:$${PORT:-8080}/health || exit 1",
+        ]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -62,7 +67,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-messenger_backend}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-messenger_backend}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -92,7 +101,11 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG; else redis-cli ping | grep -q PONG; fi"]
+      test:
+        [
+          "CMD-SHELL",
+          'if [ -n "$$REDIS_PASSWORD" ]; then redis-cli -a "$$REDIS_PASSWORD" ping | grep -q PONG; else redis-cli ping | grep -q PONG; fi',
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -121,7 +134,11 @@ services:
     volumes:
       - rustfs_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || wget -qO- http://localhost:9000/minio/health/live || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://localhost:9000/minio/health/live || wget -qO- http://localhost:9000/minio/health/live || exit 1",
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
