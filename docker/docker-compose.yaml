@@ -81,8 +81,6 @@ services:
     networks:
       - messenger-backend
 
-  # App service is optional in dev (run via: docker compose --profile full up)
-  # Default 'docker compose up' runs only dependencies so developers can run 'go run ./cmd/app' on host.
   app:
     profiles: ["app", "full"]
     build:
@@ -91,7 +89,7 @@ services:
     container_name: messenger-backend-app
     restart: unless-stopped
     ports:
-      - "${PORT:-8080}:8080"
+      - "${PORT:-8080}:${PORT:-8080}"
     env_file:
       - ../.env
     environment:
@@ -110,6 +108,17 @@ services:
       - ../clean-logs:/app/clean-logs
       - ../config:/app/config:ro
       - ../migrations:/app/migrations:ro
+      - ../adminchats.env.json:/app/adminchats.env.json:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://127.0.0.1:$${PORT:-8080}/health || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     networks:
       - messenger-backend
 

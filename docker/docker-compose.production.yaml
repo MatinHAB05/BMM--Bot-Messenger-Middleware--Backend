@@ -7,13 +7,11 @@ services:
     container_name: messenger-backend-app
     restart: unless-stopped
     ports:
-      - "${PORT:-8080}:8080"
+      - "${PORT:-8080}:${PORT:-8080}"
     env_file:
       - ../.env
     environment:
-      # Production overrides for internal docker network
       APP_ENV: production
-      PORT: 8080
       DB_HOST: postgres
       DB_PORT: 5432
       REDIS_HOST: redis
@@ -38,7 +36,7 @@ services:
       - ../clean-logs:/app/clean-logs
       - ../adminchats.env.json:/app/adminchats.env.json:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8080/health || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:$${PORT:-8080}/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -60,7 +58,6 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-messenger_backend}
     ports:
-      # Bound to 127.0.0.1 in production to prevent unintended public internet exposure
       - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -91,7 +88,6 @@ services:
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     ports:
-      # Bound to 127.0.0.1 in production to prevent unintended public internet exposure
       - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
@@ -120,9 +116,8 @@ services:
       RUSTFS_CONSOLE_ADDRESS: "0.0.0.0:9001"
       RUSTFS_CONSOLE_ENABLE: "true"
     ports:
-      # Bound to 127.0.0.1 in production to prevent unintended public internet exposure
-      - "127.0.0.1:${RUSTFS_API_PORT:-9000}:9000" # API
-      - "127.0.0.1:${RUSTFS_CONSOLE_PORT:-9001}:9001" # WebUI Console
+      - "127.0.0.1:${RUSTFS_API_PORT:-9000}:9000"
+      - "127.0.0.1:${RUSTFS_CONSOLE_PORT:-9001}:9001"
     volumes:
       - rustfs_data:/data
     healthcheck:

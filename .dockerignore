@@ -7,26 +7,26 @@
 .env
 .env.*
 !.env.example
+adminchats.env.json
 
 # Binaries & build artifacts
 *.exe
 *.exe~
-/bin
-/out
-/messenger-backend
 *.test
 *.out
 /vendor
+/bin
+/out
+/messenger-backend
 
-# Runtime log output
-/logs/*
-!/logs/.gitkeep
-/clean-logs/*
-!/clean-logs/.gitkeep
+# Runtime logs & temporary files
+logs/
+clean-logs/
+tmp/
 
 # IDEs & OS files
-.idea
 .vscode
+.idea
 *.swp
 *~
 .DS_Store
