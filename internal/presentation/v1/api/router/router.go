@@ -36,6 +36,10 @@ type Dependencies struct {
 	Logger     logger.Logger
 }
 
+func imFine(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
 // New builds the fully wired Gin engine: global middleware first, then the
 // versioned route tree under /api/v1.
 func New(deps Dependencies, cfg *Config) *gin.Engine {
@@ -51,9 +55,8 @@ func New(deps Dependencies, cfg *Config) *gin.Engine {
 	// TODO : for now beacause we use polling method for get history of chat history we need to unlimited or very low limiter for endpoints SO when polling is replaced with ws rate limiter must used again
 	// engine.Use(apimiddleware.RateLimit(deps.RateLimiterRepository, "global", cfg.GlobalPerMinute, time.Minute, deps.Logger))
 
-	engine.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
-	})
+	engine.GET("/health", imFine)
+	engine.HEAD("/health", imFine)
 
 	v1 := engine.Group("/api/v1")
 
