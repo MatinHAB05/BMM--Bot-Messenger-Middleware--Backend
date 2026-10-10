@@ -114,6 +114,8 @@ type S3Config struct {
 	Region          string `json:"region" mapstructure:"RUSTFS_REGION"`
 	Bucket          string `json:"bucket" mapstructure:"RUSTFS_BUCKET"`
 	MaxConcurrency  int    `json:"max_currency" mapstructure:"RUSTFS_MAX_CURRENCY"`
+	PublicEndpoint  string `json:"public-endpoint" mapstructure:"RUSTFS_PUBLIC_ENDPOINT"`
+	PublicUseSSL    bool   `json:"public_use_ssl" mapstructure:"RUSTFS_PUBLIC_USE_SSL"`
 }
 
 type AttachmentConfig struct {
